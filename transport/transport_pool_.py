@@ -47,6 +47,18 @@ class Http(httplib2.Http):
       # We returned an item, notify a waiting thread.
       self._condition.notify(n=1)
 
+  def add_certificate(self, key, cert, domain):
+    """Adds a certificate to all of the underlying transports.
+
+    From httplib2 docs:
+
+    Add a key and cert that will be used for an SSL connection to the
+    specified domain. keyfile is the name of a PEM formatted file that contains
+    your private key. certfile is a PEM formatted certificate chain file.
+    """
+    for transport in self._transports:
+      transport.add_certificate(key, cert, domain)
+
   def request(self, *args, **kwargs):
     """This awaits a transport and delegates the request call.
 
