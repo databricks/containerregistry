@@ -45,6 +45,13 @@ parser.add_argument('--name', action='store',
 parser.add_argument('--directory', action='store',
                     help='Where to save the image\'s files.')
 
+parser.add_argument('--certificate', nargs='*', help='A comma separated ' +
+                    'tuple of key file, cert, and domain. (From httplib2 ' +
+                    'docs) Add a key and cert that will be used for an SSL ' +
+                    'connection to the specified domain. keyfile is the name ' +
+                    'of a PEM formatted file that contains your private key. ' +
+                    'certfile is a PEM formatted certificate chain file.')
+
 _THREADS = 8
 
 
