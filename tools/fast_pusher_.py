@@ -130,9 +130,11 @@ def main():
 
   transport = transport_pool.Http(httplib2.Http, size=_THREADS)
 
-  for item in args.certificates:
-    key, cert, domain = item.split(',')
-    transport.add_certificate(key, cert, domain)
+  if args.certificates:
+    for item in args.certificates:
+      logging.info('Adding certificate %s', item)
+      key, cert, domain = item.split(',')
+      transport.add_certificate(key, cert, domain)
 
   # Resolve the appropriate credential to use based on the standard Docker
   # client logic.
