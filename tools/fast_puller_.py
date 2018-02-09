@@ -20,6 +20,7 @@ Unlike docker_puller the format this uses is proprietary.
 
 import argparse
 import logging
+import time
 
 from containerregistry.client import docker_creds
 from containerregistry.client import docker_name
@@ -52,9 +53,20 @@ parser.add_argument('--certificates', nargs='*', help='A comma separated ' +
                     'of a PEM formatted file that contains your private key. ' +
                     'certfile is a PEM formatted certificate chain file.')
 
-_THREADS = 8
+_THREADS = 50
 
+def time_function(func):
+    def wrap(*args):
+        try:
+            time1 = time.time()
+            return func(*args)
+        finally:
+            time2 = time.time()
+            print '%s function took %0.3f ms' % (func.func_name, (time2 - time1) * 1000.0)
 
+    return wrap
+
+@time_function
 def main():
   logging_setup.DefineCommandLineArgs(parser)
   args = parser.parse_args()
@@ -64,6 +76,8 @@ def main():
     raise Exception('--name and --directory are required arguments.')
 
   transport = transport_pool.Http(httplib2.Http, size=_THREADS)
+
+  print "THREADS: " + str(_THREADS)
 
   if args.certificates:
     for item in args.certificates:
@@ -90,14 +104,18 @@ def main():
   creds = docker_creds.DefaultKeychain.Resolve(name)
 
   logging.info('Pulling v2.2 image from %r ...', name)
+  print 'Pulling v2.2 image from %r ...' % name
   with v2_2_image.FromRegistry(name, creds, transport, accept) as v2_2_img:
     if v2_2_img.exists():
       save.fast(v2_2_img, args.directory, threads=_THREADS)
       return
 
   logging.info('Pulling v2 image from %r ...', name)
+  print 'Pullinggggg v2 image from %r ...' % name
   with v2_image.FromRegistry(name, creds, transport) as v2_img:
+    print "Starting pull"
     with v2_compat.V22FromV2(v2_img) as v2_2_img:
+      print "Finished pull"
       save.fast(v2_2_img, args.directory, threads=_THREADS)
       return
 

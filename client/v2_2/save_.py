@@ -30,6 +30,8 @@ from containerregistry.client.v2 import v1_compat
 from containerregistry.client.v2_2 import docker_image as v2_2_image
 from containerregistry.client.v2_2 import v2_compat
 
+from multiprocess import Manager, Pool, Value  # pylint: disable=import-error
+
 
 
 def _diff_id(v1_img, blob):
@@ -147,13 +149,14 @@ def fast(
     element is an ordered list of tuples whose elements are the filenames
     containing: (.sha256, .tar.gz) respectively.
   """
-
   def write_file(
       name,
       accessor,
       arg
   ):
+    print "ENTERING"
     with open(name, 'wb') as f:
+      print "WRITING FILE: " + name
       f.write(accessor(arg))
 
   with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
@@ -165,6 +168,8 @@ def fast(
 
     idx = 0
     layers = []
+    tasks = []
+
     for blob in reversed(image.fs_layers()):
       # Create a local copy
       digest_name = os.path.join(directory, '%03d.sha256' % idx)
@@ -174,11 +179,24 @@ def fast(
       future_to_params[f] = digest_name
 
       layer_name = os.path.join(directory, '%03d.tar.gz' % idx)
-      f = executor.submit(write_file, layer_name, image.blob, blob)
-      future_to_params[f] = layer_name
+
+      def task():
+        print "TASK: " + layer_name
+        write_file(layer_name, image.blob, blob)
+
+      # f = executor.submit(write_file, layer_name, image.blob, blob)
+      # future_to_params[f] = layer_name
+      print "Appending Task"
+      tasks.append(task)
 
       layers.append((digest_name, layer_name))
       idx += 1
+
+    print "POOOOOOOOL"
+    pool = Pool(processes=min(threads, len(tasks)))
+    pool.map(lambda fn: fn(), tasks)
+    pool.close()
+    pool.join()
 
     # Wait for completion.
     for future in concurrent.futures.as_completed(future_to_params):

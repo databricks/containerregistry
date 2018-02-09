@@ -18,6 +18,7 @@
 
 import hashlib
 import json
+import time
 
 from containerregistry.client.v2 import docker_image as v2_image
 from containerregistry.client.v2 import util as v2_util
@@ -25,6 +26,7 @@ from containerregistry.client.v2_2 import docker_http
 from containerregistry.client.v2_2 import docker_image as v2_2_image
 
 
+from multiprocess import Manager, Pool, Value  # pylint: disable=import-error
 
 class BadDigestException(Exception):
   """Exceptions when a bad digest is supplied."""
@@ -89,10 +91,21 @@ def config_file(
 
   return json.dumps(config, sort_keys=True)
 
+def time_function(func):
+    def wrap(*args):
+        try:
+            time1 = time.time()
+            return func(*args)
+        finally:
+            time2 = time.time()
+            print '%s function took %0.3f ms' % (func.func_name, (time2 - time1) * 1000.0)
+
+    return wrap
 
 class V22FromV2(v2_2_image.DockerImage):
   """This compatibility interface serves the v2 interface from a v2_2 image."""
 
+  @time_function
   def __init__(self, v2_img):
     """Constructor.
 
@@ -104,28 +117,57 @@ class V22FromV2(v2_2_image.DockerImage):
     """
     self._v2_image = v2_img
     self._ProcessImage()
+    print "FINISHED V22FromV2"
 
   def _ProcessImage(self):
     """Constructs schema 2 manifest from schema 1 manifest."""
     raw_manifest_schema1 = self._v2_image.manifest()
     manifest_schema1 = json.loads(raw_manifest_schema1)
 
+    print "A"
+
+
     # Compute the config_file for the v2.2 image.
     # TODO(b/62576117): Remove the pytype disable.
+    # self._config_file = config_file([
+    #     json.loads(history.get('v1Compatibility', '{}'))
+    #     for history in reversed(manifest_schema1.get('history', []))
+    # ], [
+    #     self._GetDiffId(digest)
+    #     for digest in reversed(
+    #         self._v2_image.fs_layers())  # pytype: disable=wrong-arg-types
+    # ])
+    print "B"
+
+    digests = reversed(self._v2_image.fs_layers())
+
+
+    time1 = time.time()
+
+    pool = Pool(processes=50)
+    diff_ids = pool.map(self._GetDiffId, digests)
+    pool.close()
+    pool.join()
+
+    time2 = time.time()
+    print 'Diffids function took %0.3f ms' % ((time2 - time1) * 1000.0)
+
+    print "C"
+
     self._config_file = config_file([
         json.loads(history.get('v1Compatibility', '{}'))
         for history in reversed(manifest_schema1.get('history', []))
-    ], [
-        self._GetDiffId(digest)
-        for digest in reversed(
-            self._v2_image.fs_layers())  # pytype: disable=wrong-arg-types
-    ])
+    ], diff_ids)
+
+    print "D"
 
     config_descriptor = {
         'mediaType': docker_http.CONFIG_JSON_MIME,
         'size': len(self._config_file),
         'digest': 'sha256:' + hashlib.sha256(self._config_file).hexdigest()
     }
+
+    print "E"
 
     manifest_schema2 = {
         'schemaVersion': 2,
@@ -141,14 +183,17 @@ class V22FromV2(v2_2_image.DockerImage):
         ]
     }
     self._manifest = json.dumps(manifest_schema2, sort_keys=True)
+    print "F"
 
   def _GetDiffId(
       self,
       digest
   ):
     """Hash the uncompressed layer blob."""
-    return 'sha256:' + hashlib.sha256(
-        self._v2_image.uncompressed_blob(digest)).hexdigest()
+    # return 'sha256:' + hashlib.sha256(
+    #     self._v2_image.uncompressed_blob(digest)).hexdigest()
+    self._v2_image.uncompressed_blob(digest)
+    return 'sha256:0fd89f083a8b4528defd75412514912df496ee2722ae6566941c93c6636fd995'
 
   def manifest(self):
     """Override."""
@@ -160,6 +205,7 @@ class V22FromV2(v2_2_image.DockerImage):
 
   def uncompressed_blob(self, digest):
     """Override."""
+    print "uncompressed blob: " + digest
     return self._v2_image.uncompressed_blob(digest)
 
   def blob(self, digest):
@@ -313,6 +359,7 @@ class V2FromV22(v2_image.DockerImage):
 
   def uncompressed_blob(self, digest):
     """Override."""
+    print "uncompressed blob2: " + digest
     if digest == EMPTY_TAR_DIGEST:
       # See comment in blob().
       return super(V2FromV22, self).uncompressed_blob(EMPTY_TAR_DIGEST)

@@ -33,6 +33,7 @@ class V1FromV2(v1_image.DockerImage):
     Args:
       v2_img: a v2 DockerImage on which __enter__ has already been called.
     """
+    print "V1 COMPAT"
     self._v2_image = v2_img
     self._ComputeLayerMapping()
 
