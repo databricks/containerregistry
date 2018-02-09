@@ -113,8 +113,6 @@ class V22FromV2(v2_2_image.DockerImage):
 
     # Compute the config_file for the v2.2 image.
     # TODO(b/62576117): Remove the pytype disable.
-
-
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
       diff_id_futures = [
           executor.submit(self._GetDiffId, digest)
