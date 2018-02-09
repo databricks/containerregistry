@@ -109,6 +109,10 @@ class BadStateException(Exception):
   """Exceptions when we have entered an unexpected state."""
 
 
+class TokenRefreshException(BadStateException):
+  """Exception when token refresh fails."""
+
+
 def _CheckState(predicate, message=None):
   if not predicate:
     raise BadStateException(message if message else 'Unknown')
@@ -184,16 +188,17 @@ class Transport(object):
         'content-type': 'application/json',
         'user-agent': docker_name.USER_AGENT,
     }
-    resp, unused_content = self._transport.request(
-        '{scheme}://{registry}/v2/'.format(scheme=Scheme(self._name.registry),
-                                           registry=self._name.registry),
+    resp, content = self._transport.request(
+        '{scheme}://{registry}/v2/'.format(
+            scheme=Scheme(self._name.registry), registry=self._name.registry),
         'GET',
         body=None,
         headers=headers)
 
     # We expect a www-authenticate challenge.
     _CheckState(resp.status in [httplib.OK, httplib.UNAUTHORIZED],
-                'Unexpected status: %d' % resp.status)
+                'Unexpected response pinging the registry: {}\nBody: {}'.format(
+                    resp.status, content or '<empty>'))
 
     # The registry is authenticated iff we have an authentication challenge.
     if resp.status == httplib.OK:
@@ -207,6 +212,11 @@ class Transport(object):
                 'Unexpected "www-authenticate" header form: %s' % challenge)
 
     (self._authentication, remainder) = challenge.split(' ', 1)
+
+    # Normalize the authentication scheme to have exactly the first letter
+    # capitalized. Scheme matching is required to be case insensitive:
+    # https://tools.ietf.org/html/rfc7235#section-2.1
+    self._authentication = self._authentication.capitalize()
 
     _CheckState(self._authentication in [_BASIC, _BEARER],
                 'Unexpected "www-authenticate" challenge type: %s'
@@ -240,6 +250,9 @@ class Transport(object):
     This is generally called under two circumstances:
       1) When the transport is created (eagerly)
       2) When a request fails on a 401 Unauthorized
+
+    Raises:
+      TokenRefreshException: Error during token exchange.
     """
     headers = {
         'content-type': 'application/json',
@@ -257,9 +270,9 @@ class Transport(object):
             query=urllib.urlencode(parameters)),
         'GET', body=None, headers=headers)
 
-    _CheckState(resp.status == httplib.OK,
-                'Bad status during token exchange: %d\n%s' % (
-                    resp.status, content))
+    if resp.status != httplib.OK:
+      raise TokenRefreshException('Bad status during token exchange: %d\n%s' %
+                                  (resp.status, content))
 
     wrapper_object = json.loads(content)
     _CheckState('token' in wrapper_object,
@@ -384,7 +397,7 @@ def Scheme(endpoint):
   """Returns https scheme for all the endpoints except localhost."""
   if endpoint.startswith('localhost:'):
     return 'http'
-  elif re.match(r'.*\.local(?::\d{1,5})?$', endpoint):
+  elif re.match(r'.*\.local(?:host)?(?::\d{1,5})?$', endpoint):
     return 'http'
   else:
     return 'https'
