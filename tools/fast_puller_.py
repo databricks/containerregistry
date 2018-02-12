@@ -21,6 +21,7 @@ Unlike docker_puller the format this uses is proprietary.
 import argparse
 import logging
 import sys
+import traceback
 
 from containerregistry.client import docker_creds
 from containerregistry.client import docker_name
@@ -54,7 +55,7 @@ parser.add_argument('--certificates', nargs='*', help='A comma separated ' +
                     'of a PEM formatted file that contains your private key. ' +
                     'certfile is a PEM formatted certificate chain file.')
 
-_THREADS = 8
+_THREADS = 50
 
 
 def main():
@@ -105,9 +106,6 @@ def main():
         save.fast(v2_2_img, args.directory, threads=_THREADS)
         return
 
-    logging.fatal('Could not find V2.2 Image %r', name)
-    sys.exit(1)
-
     logging.info('Pulling v2 image from %r ...', name)
     with v2_image.FromRegistry(name, creds, transport) as v2_img:
       with v2_compat.V22FromV2(v2_img) as v2_2_img:
@@ -116,6 +114,7 @@ def main():
   # pylint: disable=broad-except
   except Exception as e:
     logging.fatal('Error pulling and saving image %s: %s', name, e)
+    traceback.print_exc()
     sys.exit(1)
 
 
