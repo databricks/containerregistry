@@ -105,6 +105,9 @@ def main():
         save.fast(v2_2_img, args.directory, threads=_THREADS)
         return
 
+    logging.fatal('Could not find V2.2 Image %r', name)
+    sys.exit(1)
+
     logging.info('Pulling v2 image from %r ...', name)
     with v2_image.FromRegistry(name, creds, transport) as v2_img:
       with v2_compat.V22FromV2(v2_img) as v2_2_img:
