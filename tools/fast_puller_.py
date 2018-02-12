@@ -21,7 +21,6 @@ Unlike docker_puller the format this uses is proprietary.
 import argparse
 import logging
 import sys
-import traceback
 
 from containerregistry.client import docker_creds
 from containerregistry.client import docker_name
@@ -55,7 +54,7 @@ parser.add_argument('--certificates', nargs='*', help='A comma separated ' +
                     'of a PEM formatted file that contains your private key. ' +
                     'certfile is a PEM formatted certificate chain file.')
 
-_THREADS = 50
+_THREADS = 8
 
 
 def main():
@@ -114,7 +113,6 @@ def main():
   # pylint: disable=broad-except
   except Exception as e:
     logging.fatal('Error pulling and saving image %s: %s', name, e)
-    traceback.print_exc()
     sys.exit(1)
 
 

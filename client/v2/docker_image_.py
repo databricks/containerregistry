@@ -23,7 +23,6 @@ import hashlib
 import httplib
 import json
 import os
-import subprocess
 import tarfile
 
 from containerregistry.client import docker_creds
@@ -87,10 +86,6 @@ class DockerImage(object):
     buf = cStringIO.StringIO(self.blob(digest))
     f = gzip.GzipFile(mode='rb', fileobj=buf)
     return f.read()
-    # p = subprocess.Popen(["zcat"], stdout = subprocess.PIPE, stdin = subprocess.PIPE)
-    # fh = cStringIO.StringIO(p.communicate(buf.read())[0])
-    # assert p.returncode == 0
-    # return fh.read()
 
   # __enter__ and __exit__ allow use as a context manager.
   @abc.abstractmethod
