@@ -47,6 +47,9 @@ parser.add_argument('--name', action='store',
 parser.add_argument('--directory', action='store',
                     help='Where to save the image\'s files.')
 
+parser.add_argument('--allow-v2', action='store_true',
+                    help='Allow pulling V2 Images')
+
 parser.add_argument('--certificates', nargs='*', help='A comma separated ' +
                     'tuple of key file, cert, and domain. (From httplib2 ' +
                     'docs) Add a key and cert that will be used for an SSL ' +
@@ -105,8 +108,9 @@ def main():
         save.fast(v2_2_img, args.directory, threads=_THREADS)
         return
 
-    logging.fatal('v2.2 image not found: %r', name)
-    sys.exit(1)
+    if not args.allow_v2:
+      logging.fatal('v2.2 image not found: %r', name)
+      sys.exit(1)
 
     logging.info('Pulling v2 image from %r ...', name)
     with v2_image.FromRegistry(name, creds, transport) as v2_img:
