@@ -50,6 +50,9 @@ parser.add_argument('--directory', action='store',
 parser.add_argument('--allow-v2', action='store_true',
                     help='Allow pulling V2 Images')
 
+parser.add_argument('--first-layer', action='store', type=int,
+                    help=('WIP'))
+
 parser.add_argument('--certificates', nargs='*', help='A comma separated ' +
                     'tuple of key file, cert, and domain. (From httplib2 ' +
                     'docs) Add a key and cert that will be used for an SSL ' +
@@ -105,7 +108,7 @@ def main():
     logging.info('Pulling v2.2 image from %r ...', name)
     with v2_2_image.FromRegistry(name, creds, transport, accept) as v2_2_img:
       if v2_2_img.exists():
-        save.fast(v2_2_img, args.directory, threads=_THREADS)
+        save.fast(v2_2_img, args.directory, threads=_THREADS, first_layer=args.first_layer)
         return
 
     if not args.allow_v2:

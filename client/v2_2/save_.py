@@ -121,7 +121,8 @@ def tarball(
 def fast(
     image,
     directory,
-    threads = 1
+    threads = 1,
+    first_layer = 0,
 ):
   """Produce a FromDisk compatible file layout under the provided directory.
 
@@ -167,6 +168,10 @@ def fast(
     layers = []
     for blob in reversed(image.fs_layers()):
       # Create a local copy
+      if idx < first_layer:
+        idx += 1
+        continue
+
       digest_name = os.path.join(directory, '%03d.sha256' % idx)
       f = executor.submit(write_file, digest_name,
                           # Strip the sha256: prefix
