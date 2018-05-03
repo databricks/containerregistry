@@ -24,8 +24,6 @@ import httplib
 import json
 import os
 import tarfile
-import tempfile
-import subprocess
 
 from containerregistry.client import docker_creds
 from containerregistry.client import docker_name
@@ -206,13 +204,7 @@ class FromRegistry(DockerImage):
     """Override."""
     # GET server1/v2/<name>/blobs/<digest>
     c = self._content('blobs/' + digest, cache=False)
-    with tempfile.NamedTemporaryFile(mode='w', delete=True) as tmp_out:
-      tmp_out.write(c)
-      tmp_out.flush()
-      hash_out = subprocess.check_output(["shasum", "-a", "256", tmp_out.name]).split(" ")[0]
-      computed = 'sha256:' + hash_out
-
-    # computed = 'sha256:' + hashlib.sha256(c).hexdigest()
+    computed = 'sha256:' + hashlib.sha256(c).hexdigest()
     if digest != computed:
       raise DigestMismatchedError(
           'The returned content\'s digest did not match its content-address, '

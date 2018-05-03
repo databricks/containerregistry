@@ -160,7 +160,8 @@ class V22FromV2(v2_2_image.DockerImage):
     with tempfile.NamedTemporaryFile(mode='w', delete=True) as tmp_out:
       tmp_out.write(self.blob(digest))
       tmp_out.flush()
-      hash_out = subprocess.check_output(["bash", "-c", "gunzip -c %s | shasum -a 256" % tmp_out.name], shell=True).split(" ")[0]
+      hash_out = subprocess.check_output(["gunzip -c %s | shasum -a 256 -" % tmp_out.name], shell=True).split(" ")[0]
+      assert len(hash_out) == 64
     return 'sha256:' + hash_out
 
   def manifest(self):
