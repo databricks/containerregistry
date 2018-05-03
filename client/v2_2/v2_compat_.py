@@ -18,6 +18,8 @@
 
 import hashlib
 import json
+import tempfile
+import subprocess
 
 import concurrent.futures
 from containerregistry.client.v2 import docker_image as v2_image
@@ -153,8 +155,13 @@ class V22FromV2(v2_2_image.DockerImage):
       digest
   ):
     """Hash the uncompressed layer blob."""
-    return 'sha256:' + hashlib.sha256(
-        self._v2_image.uncompressed_blob(digest)).hexdigest()
+    # return 'sha256:' + hashlib.sha256(
+    #     self._v2_image.uncompressed_blob(digest)).hexdigest()
+    with tempfile.NamedTemporaryFile(mode='w', delete=True) as tmp_out:
+      tmp_out.write(self.blob(digest))
+      tmp_out.flush()
+      hash_out = subprocess.check_output(["bash", "-c", "gunzip -c %s | shasum -a 256" % tmp_out.name], shell=True).split(" ")[0]
+    return 'sha256:' + hash_out
 
   def manifest(self):
     """Override."""

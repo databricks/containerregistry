@@ -21,6 +21,9 @@ import hashlib
 import json
 import os
 import tarfile
+import time
+import tempfile
+import subprocess
 
 import concurrent.futures
 from containerregistry.client import docker_name
@@ -34,7 +37,12 @@ from containerregistry.client.v2_2 import v2_compat
 
 def _diff_id(v1_img, blob):
   unzipped = v1_img.uncompressed_layer(blob)
-  return 'sha256:' + hashlib.sha256(unzipped).hexdigest()
+  with tempfile.NamedTemporaryFile(mode='w', delete=True) as tmp_out:
+    tmp_out.write(unzipped)
+    tmp_out.flush()
+    hash_out = subprocess.check_output(["shasum", "-a", "256", tmp_out.name]).split(" ")[0]
+  return 'sha256:' + hash_out
+  # return 'sha256:' + hashlib.sha256(unzipped).hexdigest()
 
 
 def multi_image_tarball(
@@ -70,19 +78,31 @@ def multi_image_tarball(
   manifests = []
 
   for (tag, image) in tag_to_image.iteritems():
+    start = time.time()
+    print "A: " + str(time.time() - start)
     # The config file is stored in a blob file named with its digest.
     digest = hashlib.sha256(image.config_file()).hexdigest()
+    print "B: " + str(time.time() - start)
     add_file(digest + '.json', image.config_file())
+    print "C: " + str(time.time() - start)
 
     cfg = json.loads(image.config_file())
+    print "D: " + str(time.time() - start)
     diffs = set(cfg.get('rootfs', {}).get('diff_ids', []))
+    print "E: " + str(time.time() - start)
 
     v1_img = tag_to_v1_image.get(tag)
+    print "F: " + str(time.time() - start)
     if not v1_img:
+      print "G: " + str(time.time() - start)
       v2_img = v2_compat.V2FromV22(image)
+      print "H: " + str(time.time() - start)
       v1_img = v1_compat.V1FromV2(v2_img)
+      print "I: " + str(time.time() - start)
       tag_to_v1_image[tag] = v1_img
+      print "J: " + str(time.time() - start)
 
+    print "K: " + str(time.time() - start)
     # Add the manifests entry for this image.
     manifests.append({
         'Config': digest + '.json',
@@ -95,12 +115,15 @@ def multi_image_tarball(
         ],
         'RepoTags': [str(tag)]
     })
+    print "L: " + str(time.time() - start)
 
   # v2.2 tarballs are a superset of v1 tarballs, so delegate
   # to v1 to save itself.
   v1_save.multi_image_tarball(tag_to_v1_image, tar)
+  print "M: " + str(time.time() - start)
 
   add_file('manifest.json', json.dumps(manifests, sort_keys=True))
+  print "N: " + str(time.time() - start)
 
 
 def tarball(
