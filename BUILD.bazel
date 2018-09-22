@@ -101,3 +101,14 @@ sh_test(
         ":pusher.par",
     ],
 )
+
+py_test(
+    name = "client_v2_2_unit_tests",
+    size = "large",
+    srcs = [
+        "client_v2_2_unit_tests.py",
+        ":containerregistry",
+    ],
+    main = "client_v2_2_unit_tests.py",
+)
+

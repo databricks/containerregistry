@@ -697,20 +697,18 @@ class FromDisk(DockerImage):
     pass
 
 
-def _in_whiteout_dir(
-    fs,
-    name
-):
+def _in_whiteout_dir(fs, opaque_whiteouts, name):
   while name:
     dirname = os.path.dirname(name)
     if name == dirname:
       break
-    if fs.get(dirname):
+    if fs.get(dirname) or dirname in opaque_whiteouts:
       return True
     name = dirname
   return False
 
 _WHITEOUT_PREFIX = '.wh.'
+_OPAQUE_WHITEOUT_FILENAME = '.wh..wh..opq'
 
 
 def extract(image, tar):
@@ -724,17 +722,27 @@ def extract(image, tar):
   # to whether they are a tombstone or not.
   fs = {}
 
+  opaque_whiteouts_in_higher_layers = set()
+
   # Walk the layers, topmost first and add files.  If we've seen them in a
   # higher layer then we skip them
   for layer in image.diff_ids():
     buf = cStringIO.StringIO(image.uncompressed_layer(layer))
     with tarfile.open(mode='r:', fileobj=buf) as layer_tar:
+      opaque_whiteouts_in_this_layer = []
       for tarinfo in layer_tar:
         # If we see a whiteout file, then don't add anything to the tarball
         # but ensure that any lower layers don't add a file with the whited
         # out name.
         basename = os.path.basename(tarinfo.name)
         dirname = os.path.dirname(tarinfo.name)
+
+        # If we see an opaque whiteout file, then don't add anything to the
+        # tarball but ensure that any lower layers don't add files or
+        # directories which are siblings of the whiteout file.
+        if basename == _OPAQUE_WHITEOUT_FILENAME:
+          opaque_whiteouts_in_this_layer.append(dirname)
+
         tombstone = basename.startswith(_WHITEOUT_PREFIX)
         if tombstone:
           basename = basename[len(_WHITEOUT_PREFIX):]
@@ -746,7 +754,7 @@ def extract(image, tar):
           continue
 
         # Check for a whited out parent directory
-        if _in_whiteout_dir(fs, name):
+        if _in_whiteout_dir(fs, opaque_whiteouts_in_higher_layers, name):
           continue
 
         # Mark this file as handled by adding its name.
@@ -758,3 +766,4 @@ def extract(image, tar):
             tar.addfile(tarinfo, fileobj=layer_tar.extractfile(tarinfo))
           else:
             tar.addfile(tarinfo, fileobj=None)
+      opaque_whiteouts_in_higher_layers.update(opaque_whiteouts_in_this_layer)
