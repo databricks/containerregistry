@@ -23,6 +23,7 @@ compatible with docker_pusher.
 import argparse
 import logging
 import sys
+import os
 
 from containerregistry.client import docker_creds
 from containerregistry.client import docker_name
@@ -35,7 +36,6 @@ from containerregistry.transport import retry
 from containerregistry.transport import transport_pool
 
 import httplib2
-
 
 parser = argparse.ArgumentParser(
     description='Push images to a Docker Registry, faaaaaast.')
@@ -68,7 +68,8 @@ parser.add_argument('--certificates', nargs='*', help='A comma separated ' +
                     'docs) Add a key and cert that will be used for an SSL ' +
                     'connection to the specified domain. keyfile is the name ' +
                     'of a PEM formatted file that contains your private key. ' +
-                    'certfile is a PEM formatted certificate chain file.')
+                    'certfile is a PEM formatted certificate chain file. ' +
+                    'If the key/cert does not exist it will be ignored.')
 
 _THREADS = 8
 
@@ -139,10 +140,28 @@ def main():
   transport = transport_pool.Http(retry_factory.Build, size=_THREADS)
 
   if args.certificates:
+    found_one = False
+
     for item in args.certificates:
       logging.info('Adding certificate %s', item)
       key, cert, domain = item.split(',')
-      transport.add_certificate(key, cert, domain)
+      # httplib2 does not like taking cert files that do not exist, so check that they exist
+      if os.path.isfile(key) and os.path.isfile(cert):
+        transport.add_certificate(key, cert, domain)
+        test_cert_response = transport.request("https://" + domain + "/certtestignore", "POST", body="test")
+        # If the return value is success, redirect, or page not found we know that we are authorized,
+        # but that the image /certtestignore is not a real image. Which is expected.
+        if test_cert_response[0].status == 200 or \
+                test_cert_response[0].status == 201 or \
+                test_cert_response[0].status == 307 or \
+                test_cert_response[0].status == 404:
+            found_one = True
+            break;
+        transport = transport_pool.Http(retry_factory.Build, size=_THREADS)
+
+    if not found_one:
+      logging.fatal("Local kube cert expired/is not present. Please run './eng-tools/bin/get-kube-access dev'")
+      sys.exit(1)
 
   logging.info('Loading v2.2 image from disk ...')
   with v2_2_image.FromDisk(config, zip(args.digest or [], args.layer or []),
