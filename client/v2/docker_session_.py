@@ -11,27 +11,28 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """This package manages pushes to and deletes from a v2 docker registry."""
 
+from __future__ import absolute_import
+from __future__ import division
 
+from __future__ import print_function
 
-import httplib
 import logging
-import urllib
-import urlparse
 import concurrent.futures
 
 from containerregistry.client import docker_creds
 from containerregistry.client import docker_name
 from containerregistry.client.v2 import docker_http
 from containerregistry.client.v2 import docker_image
+
 import httplib2
 
+import six.moves.http_client
+import six.moves.urllib.parse
 
-def _tag_or_digest(
-    name
-):
+
+def _tag_or_digest(name):
   if isinstance(name, docker_name.Tag):
     return name.tag
   else:
@@ -42,13 +43,12 @@ def _tag_or_digest(
 class Push(object):
   """Push encapsulates a Registry v2 Docker push session."""
 
-  def __init__(
-      self,
-      name,
-      creds,
-      transport,
-      mount=None,
-      threads=1):
+  def __init__(self,
+               name,
+               creds,
+               transport,
+               mount = None,
+               threads = 1):
     """Constructor.
 
     If multiple threads are used, the caller *must* ensure that the provided
@@ -66,8 +66,8 @@ class Push(object):
       ValueError: an incorrectly typed argument was supplied.
     """
     self._name = name
-    self._transport = docker_http.Transport(
-        name, creds, transport, docker_http.PUSH)
+    self._transport = docker_http.Transport(name, creds, transport,
+                                            docker_http.PUSH)
     self._mount = mount
     self._threads = threads
 
@@ -82,56 +82,54 @@ class Push(object):
 
   def _get_absolute_url(self, location):
     # If 'location' is an absolute URL (includes host), this will be a no-op.
-    return urlparse.urljoin(base=self._scheme_and_host(), url=location)
+    return six.moves.urllib.parse.urljoin(
+        base=self._scheme_and_host(), url=location)
 
   def _blob_exists(self, digest):
     """Check the remote for the given layer."""
     # HEAD the blob, and check for a 200
     resp, unused_content = self._transport.Request(
         '{base_url}/blobs/{digest}'.format(
-            base_url=self._base_url(),
-            digest=digest),
-        method='HEAD', accepted_codes=[httplib.OK, httplib.NOT_FOUND])
+            base_url=self._base_url(), digest=digest),
+        method='HEAD',
+        accepted_codes=[
+            six.moves.http_client.OK, six.moves.http_client.NOT_FOUND
+        ])
 
-    return resp.status == httplib.OK  # pytype: disable=attribute-error
+    return resp.status == six.moves.http_client.OK  # pytype: disable=attribute-error
 
   def _manifest_exists(self, image):
     """Check the remote for the given manifest by digest."""
     # GET the manifest by digest, and check for 200
     resp, unused_content = self._transport.Request(
         '{base_url}/manifests/{digest}'.format(
-            base_url=self._base_url(),
-            digest=image.digest()),
-        method='GET', accepted_codes=[httplib.OK, httplib.NOT_FOUND])
+            base_url=self._base_url(), digest=image.digest()),
+        method='GET',
+        accepted_codes=[
+            six.moves.http_client.OK, six.moves.http_client.NOT_FOUND
+        ])
 
-    return resp.status == httplib.OK  # pytype: disable=attribute-error
+    return resp.status == six.moves.http_client.OK  # pytype: disable=attribute-error
 
   def _monolithic_upload(self, image,
                          digest):
     self._transport.Request(
         '{base_url}/blobs/uploads/?digest={digest}'.format(
-            base_url=self._base_url(),
-            digest=digest),
-        method='POST', body=image.blob(digest),
-        accepted_codes=[httplib.CREATED])
+            base_url=self._base_url(), digest=digest),
+        method='POST',
+        body=image.blob(digest),
+        accepted_codes=[six.moves.http_client.CREATED])
 
-  def _add_digest(
-      self,
-      url,
-      digest
-  ):
-    scheme, netloc, path, query_string, fragment = urlparse.urlsplit(url)
-    qs = urlparse.parse_qs(query_string)
+  def _add_digest(self, url, digest):
+    scheme, netloc, path, query_string, fragment = (
+        six.moves.urllib.parse.urlsplit(url))
+    qs = six.moves.urllib.parse.parse_qs(query_string)
     qs['digest'] = [digest]
-    query_string = urllib.urlencode(qs, doseq=True)
-    return urlparse.urlunsplit(
-        (scheme, netloc, path, query_string, fragment))
+    query_string = six.moves.urllib.parse.urlencode(qs, doseq=True)
+    return six.moves.urllib.parse.urlunsplit((scheme, netloc, path,
+                                              query_string, fragment))
 
-  def _put_upload(
-      self,
-      image,
-      digest
-  ):
+  def _put_upload(self, image, digest):
     mounted, location = self._start_upload(digest, self._mount)
 
     if mounted:
@@ -140,14 +138,14 @@ class Push(object):
 
     location = self._add_digest(location, digest)
     self._transport.Request(
-        location, method='PUT', body=image.blob(digest),
-        accepted_codes=[httplib.CREATED])
+        location,
+        method='PUT',
+        body=image.blob(digest),
+        accepted_codes=[six.moves.http_client.CREATED])
 
-  def _patch_upload(
-      self,
-      image,
-      digest
-  ):
+  # pylint: disable=missing-docstring
+  def _patch_upload(self, image,
+                    digest):
     mounted, location = self._start_upload(digest, self._mount)
 
     if mounted:
@@ -157,21 +155,24 @@ class Push(object):
     location = self._get_absolute_url(location)
 
     resp, unused_content = self._transport.Request(
-        location, method='PATCH', body=image.blob(digest),
+        location,
+        method='PATCH',
+        body=image.blob(digest),
         content_type='application/octet-stream',
-        accepted_codes=[httplib.NO_CONTENT, httplib.ACCEPTED, httplib.CREATED])
+        accepted_codes=[
+            six.moves.http_client.NO_CONTENT, six.moves.http_client.ACCEPTED,
+            six.moves.http_client.CREATED
+        ])
 
     location = self._add_digest(resp['location'], digest)
     location = self._get_absolute_url(location)
     self._transport.Request(
-        location, method='PUT', body=None,
-        accepted_codes=[httplib.CREATED])
+        location,
+        method='PUT',
+        body=None,
+        accepted_codes=[six.moves.http_client.CREATED])
 
-  def _put_blob(
-      self,
-      image,
-      digest
-  ):
+  def _put_blob(self, image, digest):
     """Upload the aufs .tgz for a single layer."""
     # We have a few choices for unchunked uploading:
     #   POST to /v2/<name>/blobs/uploads/?digest=<digest>
@@ -204,9 +205,12 @@ class Push(object):
         '{base_url}/manifests/{tag}'.format(
             base_url=self._base_url(),
             tag=self._name.tag),  # pytype: disable=attribute-error
-        method='GET', accepted_codes=[httplib.OK, httplib.NOT_FOUND])
+        method='GET',
+        accepted_codes=[
+            six.moves.http_client.OK, six.moves.http_client.NOT_FOUND
+        ])
 
-    if resp.status == httplib.NOT_FOUND:  # pytype: disable=attribute-error
+    if resp.status == six.moves.http_client.NOT_FOUND:  # pytype: disable=attribute-error
       return None
 
     return resp.get('docker-content-digest')
@@ -217,39 +221,41 @@ class Push(object):
         '{base_url}/manifests/{tag_or_digest}'.format(
             base_url=self._base_url(),
             tag_or_digest=_tag_or_digest(self._name)),
-        method='PUT', body=image.manifest(),
-        accepted_codes=[httplib.OK, httplib.CREATED, httplib.ACCEPTED])
+        method='PUT',
+        body=image.manifest().encode('utf8'),
+        accepted_codes=[
+            six.moves.http_client.OK, six.moves.http_client.CREATED,
+            six.moves.http_client.ACCEPTED
+        ])
 
-  def _start_upload(
-      self,
-      digest,
-      mount=None
-  ):
+  def _start_upload(self,
+                    digest,
+                    mount = None
+                   ):
     """POST to begin the upload process with optional cross-repo mount param."""
     if not mount:
       # Do a normal POST to initiate an upload if mount is missing.
       url = '{base_url}/blobs/uploads/'.format(base_url=self._base_url())
-      accepted_codes = [httplib.ACCEPTED]
+      accepted_codes = [six.moves.http_client.ACCEPTED]
     else:
       # If we have a mount parameter, try to mount the blob from another repo.
-      mount_from = '&'.join(
-          ['from=' + urllib.quote(repo.repository, '') for repo in self._mount])
+      mount_from = '&'.join([
+          'from=' + six.moves.urllib.parse.quote(repo.repository, '')
+          for repo in self._mount
+      ])
       url = '{base_url}/blobs/uploads/?mount={digest}&{mount_from}'.format(
-          base_url=self._base_url(),
-          digest=digest,
-          mount_from=mount_from)
-      accepted_codes = [httplib.CREATED, httplib.ACCEPTED]
+          base_url=self._base_url(), digest=digest, mount_from=mount_from)
+      accepted_codes = [
+          six.moves.http_client.CREATED, six.moves.http_client.ACCEPTED
+      ]
 
     resp, unused_content = self._transport.Request(
-        url, method='POST', body=None,
-        accepted_codes=accepted_codes)
-    return resp.status == httplib.CREATED, resp.get('location')  # type: ignore
+        url, method='POST', body=None, accepted_codes=accepted_codes)
+    # pytype: disable=attribute-error,bad-return-type
+    return resp.status == six.moves.http_client.CREATED, resp.get('location')
+    # pytype: enable=attribute-error,bad-return-type
 
-  def _upload_one(
-      self,
-      image,
-      digest
-  ):
+  def _upload_one(self, image, digest):
     """Upload a single layer, after checking whether it exists already."""
     if self._blob_exists(digest):
       logging.info('Layer %s exists, skipping', digest)
@@ -282,7 +288,8 @@ class Push(object):
           max_workers=self._threads) as executor:
         future_to_params = {
             executor.submit(self._upload_one, image, digest): (image, digest)
-            for digest in image.blob_set()}
+            for digest in image.blob_set()
+        }
         for future in concurrent.futures.as_completed(future_to_params):
           future.result()
 
@@ -300,11 +307,9 @@ class Push(object):
     logging.info('Finished upload of: %s', self._name)
 
 
-def Delete(
-    name,
-    creds,
-    transport
-):
+# pylint: disable=invalid-name
+def Delete(name,
+           creds, transport):
   """Delete a tag or digest.
 
   Args:
@@ -312,14 +317,14 @@ def Delete(
     creds: the credentials to use for deletion.
     transport: the transport to use to contact the registry.
   """
-  docker_transport = docker_http.Transport(
-      name, creds, transport, docker_http.DELETE)
+  docker_transport = docker_http.Transport(name, creds, transport,
+                                           docker_http.DELETE)
 
-  resp, unused_content = docker_transport.Request(
+  _, unused_content = docker_transport.Request(
       '{scheme}://{registry}/v2/{repository}/manifests/{entity}'.format(
           scheme=docker_http.Scheme(name.registry),
           registry=name.registry,
           repository=name.repository,
           entity=_tag_or_digest(name)),
       method='DELETE',
-      accepted_codes=[httplib.OK, httplib.ACCEPTED])
+      accepted_codes=[six.moves.http_client.OK, six.moves.http_client.ACCEPTED])

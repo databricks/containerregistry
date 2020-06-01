@@ -20,6 +20,10 @@ from containerregistry.tools import patched_
 setattr(x, 'patched', patched_)
 
 
+from containerregistry.tools import platform_args_
+setattr(x, 'platform_args', platform_args_)
+
+
 from containerregistry.tools import logging_setup_
 setattr(x, 'logging_setup', logging_setup_)
 
@@ -50,5 +54,9 @@ setattr(x, 'fast_importer', fast_importer_)
 
 from containerregistry.tools import fast_pusher_
 setattr(x, 'fast_pusher', fast_pusher_)
+
+
+from containerregistry.tools import image_digester_
+setattr(x, 'image_digester', image_digester_)
 
 

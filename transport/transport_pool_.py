@@ -11,24 +11,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """A threadsafe pool of httplib2.Http handlers."""
 
+from __future__ import absolute_import
 
+from __future__ import print_function
 
 import threading
 
 import httplib2
+from six.moves import range  # pylint: disable=redefined-builtin
+
 
 
 class Http(httplib2.Http):
   """A threadsafe pool of httplib2.Http transports."""
 
-  def __init__(self,
-               transport_factory,
-               size=2):
+  def __init__(self, transport_factory, size=2):
     self._condition = threading.Condition(threading.Lock())
-    self._transports = [transport_factory() for _ in xrange(size)]
+    self._transports = [transport_factory() for _ in range(size)]
 
   def _get_transport(self):
     with self._condition:

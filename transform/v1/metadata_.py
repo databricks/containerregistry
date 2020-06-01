@@ -13,47 +13,55 @@
 # limitations under the License.
 """This package manipulates Docker image metadata."""
 
+from __future__ import absolute_import
 
+from __future__ import print_function
 
 from collections import namedtuple
 import copy
 import os
+import six
 
 
 _OverridesT = namedtuple('OverridesT', [
-    'name', 'parent', 'size', 'entrypoint', 'cmd',
-    'env', 'labels', 'ports', 'volumes', 'workdir', 'user'
+    'name', 'parent', 'size', 'entrypoint', 'cmd', 'env', 'labels', 'ports',
+    'volumes', 'workdir', 'user'
 ])
 
 
 class Overrides(_OverridesT):
   """Docker image layer metadata options."""
 
-  def __new__(
-      cls,
-      name=None,
-      parent=None,
-      size=None,
-      entrypoint=None,
-      cmd=None,
-      user=None,
-      labels=None,
-      env=None,
-      ports=None,
-      volumes=None,
-      workdir=None):
+  def __new__(cls,
+              name = None,
+              parent = None,
+              size = None,
+              entrypoint = None,
+              cmd = None,
+              user = None,
+              labels = None,
+              env = None,
+              ports = None,
+              volumes = None,
+              workdir = None):
     """Constructor."""
     return super(Overrides, cls).__new__(
-        cls, name=name, parent=parent, size=size, entrypoint=entrypoint,
-        cmd=cmd, user=user, labels=labels, env=env, ports=ports,
-        volumes=volumes, workdir=workdir)
+        cls,
+        name=name,
+        parent=parent,
+        size=size,
+        entrypoint=entrypoint,
+        cmd=cmd,
+        user=user,
+        labels=labels,
+        env=env,
+        ports=ports,
+        volumes=volumes,
+        workdir=workdir)
 
 
 # NOT THREADSAFE
-def _Resolve(
-    value,
-    environment
-):
+def _Resolve(value, environment):
   """Resolves environment variables embedded in the given value."""
   outer_env = os.environ
   try:
@@ -64,19 +72,16 @@ def _Resolve(
 
 
 # TODO(user): Use a typing.Generic?
-def _DeepCopySkipNull(
-    data
-):
+def _DeepCopySkipNull(data):
   """Do a deep copy, skipping null entry."""
-  if type(data) == type(dict()):
+  if type(data) == type(dict()):  # pylint: disable=unidiomatic-typecheck
     return dict((_DeepCopySkipNull(k), _DeepCopySkipNull(v))
-                for k, v in data.iteritems() if v is not None)
+                for k, v in six.iteritems(data)
+                if v is not None)
   return copy.deepcopy(data)
 
 
-def _KeyValueToDict(
-    pair
-):
+def _KeyValueToDict(pair):
   """Converts an iterable object of key=value pairs to dictionary."""
   d = dict()
   for kv in pair:
@@ -85,19 +90,15 @@ def _KeyValueToDict(
   return d
 
 
-def _DictToKeyValue(
-    d
-):
+def _DictToKeyValue(d):
   return ['%s=%s' % (k, d[k]) for k in sorted(d.keys())]
 
 
-def Override(
-    data,
-    options,
-    docker_version='1.5.0',
-    architecture='amd64',
-    operating_system='linux'
-):
+def Override(data,
+             options,
+             docker_version = '1.5.0',
+             architecture = 'amd64',
+             operating_system = 'linux'):
   """Rewrite and return a copy of the input data according to options.
 
   Args:
@@ -150,14 +151,14 @@ def Override(
     # Build a dictionary of existing environment variables (used by _Resolve).
     environ_dict = _KeyValueToDict(output['config'].get('Env', []))
     # Merge in new environment variables, resolving references.
-    for k, v in options.env.iteritems():
+    for k, v in six.iteritems(options.env):
       # _Resolve handles scenarios like "PATH=$PATH:...".
       environ_dict[k] = _Resolve(v, environ_dict)
     output['config']['Env'] = _DictToKeyValue(environ_dict)
 
   if options.labels:
     label_dict = _KeyValueToDict(output['config'].get('Label', []))
-    for k, v in options.labels.iteritems():
+    for k, v in six.iteritems(options.labels):
       label_dict[k] = v
     output['config']['Label'] = _DictToKeyValue(label_dict)
 

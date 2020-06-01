@@ -11,10 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """This package exposes credentials for talking to a Docker registry."""
 
+from __future__ import absolute_import
+from __future__ import division
 
+from __future__ import print_function
 
 from containerregistry.client import docker_creds
 

@@ -13,7 +13,9 @@
 # limitations under the License.
 """This package appends a tarball to an image in a Docker Registry."""
 
+from __future__ import absolute_import
 
+from __future__ import print_function
 
 import argparse
 import logging
@@ -29,18 +31,21 @@ from containerregistry.transport import transport_pool
 
 import httplib2
 
-
 parser = argparse.ArgumentParser(
     description='Append tarballs to an image in a Docker Registry.')
 
-parser.add_argument('--src-image', action='store',
-                    help=('The name of the docker image to append to.'))
+parser.add_argument(
+    '--src-image',
+    action='store',
+    help='The name of the docker image to append to.',
+    required=True)
 
-parser.add_argument('--tarball', action='store',
-                    help='The tarball to append.')
+parser.add_argument('--tarball', action='store', help='The tarball to append.',
+                    required=True)
 
-parser.add_argument('--dst-image', action='store',
-                    help='The name of the new image.')
+parser.add_argument(
+    '--dst-image', action='store', help='The name of the new image.',
+    required=True)
 
 _THREADS = 8
 
@@ -49,10 +54,6 @@ def main():
   logging_setup.DefineCommandLineArgs(parser)
   args = parser.parse_args()
   logging_setup.Init(args=args)
-
-  if not args.src_image or not args.tarball or not args.dst_image:
-    raise Exception('--src-image, --dst-image and --tarball are required '
-                    'arguments.')
 
   transport = transport_pool.Http(httplib2.Http, size=_THREADS)
 
@@ -71,13 +72,14 @@ def main():
       new_img = append.Layer(src_image, f.read())
 
   creds = docker_creds.DefaultKeychain.Resolve(dst)
-  with docker_session.Push(dst, creds, transport, threads=_THREADS) as session:
+  with docker_session.Push(dst, creds, transport, threads=_THREADS,
+                           mount=[src.as_repository()]) as session:
     logging.info('Starting upload ...')
     session.upload(new_img)
     digest = new_img.digest()
 
-    print('{name} was published with digest: {digest}'.format(
-        name=dst, digest=digest))
+    print(('{name} was published with digest: {digest}'.format(
+        name=dst, digest=digest)))
 
 
 if __name__ == '__main__':

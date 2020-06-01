@@ -11,14 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """This package exposes credentials for talking to a Docker registry."""
 
+from __future__ import absolute_import
+from __future__ import division
 
+from __future__ import print_function
 
 import abc
 import base64
 import errno
+import io
 import json
 import logging
 import os
@@ -28,11 +31,11 @@ from containerregistry.client import docker_name
 import httplib2
 from oauth2client import client as oauth2client
 
+import six
 
-class Provider(object):
+
+class Provider(six.with_metaclass(abc.ABCMeta, object)):
   """Interface for providing User Credentials for use with a Docker Registry."""
-
-  __metaclass__ = abc.ABCMeta  # For enforcing that methods are overriden.
 
   # pytype: disable=bad-return-type
   @abc.abstractmethod
@@ -64,7 +67,7 @@ class SchemeProvider(Provider):
 
   def Get(self):
     """Gets the credential in a form suitable for an Authorization header."""
-    return '%s %s' % (self._scheme, self.suffix)
+    return u'%s %s' % (self._scheme, self.suffix)
 
 
 class Basic(SchemeProvider):
@@ -85,7 +88,10 @@ class Basic(SchemeProvider):
 
   @property
   def suffix(self):
-    return base64.b64encode(self.username + ':' + self.password)
+    u = self.username.encode('utf8')
+    p = self.password.encode('utf8')
+    return base64.b64encode(u + b':' + p).decode('utf8')
+
 
 _USERNAME = '_token'
 
@@ -93,10 +99,8 @@ _USERNAME = '_token'
 class OAuth2(Basic):
   """Base class for turning OAuth2Credentials into suitable GCR credentials."""
 
-  def __init__(
-      self,
-      creds,
-      transport):
+  def __init__(self, creds,
+               transport):
     """Constructor.
 
     Args:
@@ -129,10 +133,7 @@ _MAGIC_NOT_FOUND_MESSAGE = 'credentials not found in native keychain'
 class Helper(Basic):
   """This provider wraps a particularly named credential helper."""
 
-  def __init__(
-      self,
-      name,
-      registry):
+  def __init__(self, name, registry):
     """Constructor.
 
     Args:
@@ -151,10 +152,11 @@ class Helper(Basic):
     bin_name = 'docker-credential-{name}'.format(name=self._name)
     logging.info('Invoking %r to obtain Docker credentials.', bin_name)
     try:
-      p = subprocess.Popen([bin_name, 'get'],
-                           stdout=subprocess.PIPE,
-                           stdin=subprocess.PIPE,
-                           stderr=subprocess.STDOUT)
+      p = subprocess.Popen(
+          [bin_name, 'get'],
+          stdout=subprocess.PIPE,
+          stdin=subprocess.PIPE,
+          stderr=subprocess.STDOUT)
     except OSError as e:
       if e.errno == errno.ENOENT:
         raise Exception('executable not found: ' + bin_name)
@@ -162,27 +164,24 @@ class Helper(Basic):
 
     # Some keychains expect a scheme:
     # https://github.com/bazelbuild/rules_docker/issues/111
-    stdout = p.communicate(input='https://' + self._registry)[0]
-
-    output = stdout.decode()
-    if output.strip() == _MAGIC_NOT_FOUND_MESSAGE:
+    stdout = p.communicate(
+        input=('https://' + self._registry).encode('utf-8'))[0]
+    if stdout.strip() == _MAGIC_NOT_FOUND_MESSAGE:
       # Use empty auth when no auth is found.
       logging.info('Credentials not found, falling back to anonymous auth.')
       return Anonymous().Get()
 
     if p.returncode != 0:
-      raise Exception('Error fetching credential for %s, exit status: %d\n%s'
-                      % (self._name, p.returncode, stdout))
+      raise Exception('Error fetching credential for %s, exit status: %d\n%s' %
+                      (self._name, p.returncode, stdout))
 
-    blob = json.loads(output)
+    blob = json.loads(stdout.decode('utf-8'))
     logging.info('Successfully obtained Docker credentials.')
     return Basic(blob['Username'], blob['Secret']).Get()
 
 
-class Keychain(object):
+class Keychain(six.with_metaclass(abc.ABCMeta, object)):
   """Interface for resolving an image reference to a credential."""
-
-  __metaclass__ = abc.ABCMeta  # For enforcing that methods are overriden.
 
   # pytype: disable=bad-return-type
   @abc.abstractmethod
@@ -197,14 +196,18 @@ class Keychain(object):
     """
   # pytype: enable=bad-return-type
 
+
 _FORMATS = [
     # Allow naked domains
     '%s',
     # Allow scheme-prefixed.
-    'https://%s', 'http://%s',
+    'https://%s',
+    'http://%s',
     # Allow scheme-prefixes with version in url path.
-    'https://%s/v1/', 'http://%s/v1/',
-    'https://%s/v2/', 'http://%s/v2/',
+    'https://%s/v1/',
+    'http://%s/v1/',
+    'https://%s/v2/',
+    'http://%s/v2/',
 ]
 
 
@@ -229,13 +232,32 @@ def _GetConfigDirectory():
 class _DefaultKeychain(Keychain):
   """This implements the default docker credential resolution."""
 
+  def __init__(self):
+    # Store a custom directory to get the Docker configuration JSON from
+    self._config_dir = None
+    # Name of the docker configuration JSON file to look for in the
+    # configuration directory
+    self._config_file = 'config.json'
+
+  def setCustomConfigDir(self, config_dir):
+    # Override the configuration directory where the docker configuration
+    # JSON is searched for
+    if not os.path.isdir(config_dir):
+      raise Exception('Attempting to override docker configuration directory'
+                      ' to invalid directory: {}'.format(config_dir))
+    self._config_dir = config_dir
+
   def Resolve(self, name):
     # TODO(user): Consider supporting .dockercfg, which was used prior
     # to Docker 1.7 and consisted of just the contents of 'auths' below.
     logging.info('Loading Docker credentials for repository %r', str(name))
-    config_file = os.path.join(_GetConfigDirectory(), 'config.json')
+    config_file = None
+    if self._config_dir is not None:
+      config_file = os.path.join(self._config_dir, self._config_file)
+    else:
+      config_file = os.path.join(_GetConfigDirectory(), self._config_file)
     try:
-      with open(config_file, 'r') as reader:
+      with io.open(config_file, u'r', encoding='utf8') as reader:
         cfg = json.loads(reader.read())
     except IOError:
       # If the file doesn't exist, fallback on anonymous auth.
@@ -257,7 +279,8 @@ class _DefaultKeychain(Keychain):
       if form % name.registry in auths:
         entry = auths[form % name.registry]
         if 'auth' in entry:
-          username, password = base64.b64decode(entry['auth']).split(':', 1)
+          decoded = base64.b64decode(entry['auth']).decode('utf8')
+          username, password = decoded.split(':', 1)
           return Basic(username, password)
         elif 'username' in entry and 'password' in entry:
           return Basic(entry['username'], entry['password'])
@@ -265,8 +288,8 @@ class _DefaultKeychain(Keychain):
           # TODO(user): Support identitytoken
           # TODO(user): Support registrytoken
           raise Exception(
-              'Unsupported entry in "auth" section of Docker config: %s'
-              % json.dumps(entry))
+              'Unsupported entry in "auth" section of Docker config: ' +
+              json.dumps(entry))
 
     return Anonymous()
 

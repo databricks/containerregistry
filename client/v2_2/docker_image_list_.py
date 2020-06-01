@@ -11,13 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """This package provides DockerImageList for examining Manifest Lists."""
 
+from __future__ import absolute_import
+from __future__ import division
 
+from __future__ import print_function
 
 import abc
-import httplib
 import json
 
 from containerregistry.client import docker_creds
@@ -25,7 +26,10 @@ from containerregistry.client import docker_name
 from containerregistry.client.v2_2 import docker_digest
 from containerregistry.client.v2_2 import docker_http
 from containerregistry.client.v2_2 import docker_image as v2_2_image
+
 import httplib2
+import six
+import six.moves.http_client
 
 
 class DigestMismatchedError(Exception):
@@ -100,17 +104,15 @@ class Platform(object):
     self._content['architecture'] = self.architecture()
     self._content['os'] = self.os()
 
-    return iter(self._content.iteritems())
+    return iter(six.iteritems(self._content))
 
 
-class DockerImageList(object):
+class DockerImageList(six.with_metaclass(abc.ABCMeta, object)):
   """Interface for implementations that interact with Docker manifest lists."""
-
-  __metaclass__ = abc.ABCMeta  # For enforcing that methods are overridden.
 
   def digest(self):
     """The digest of the manifest."""
-    return docker_digest.SHA256(self.manifest())
+    return docker_digest.SHA256(self.manifest().encode('utf8'))
 
   def media_type(self):
     """The media type of the manifest."""
@@ -126,6 +128,7 @@ class DockerImageList(object):
     Returns:
       The raw json manifest
     """
+
   # pytype: enable=bad-return-type
 
   # pytype: disable=bad-return-type
@@ -142,10 +145,11 @@ class DockerImageList(object):
       A list of images that can be run on the target platform. The images are
       sorted by their digest.
     """
+
   # pytype: enable=bad-return-type
 
-  def resolve(self, target = None
-             ):
+  def resolve(self,
+              target = None):
     """Resolves a manifest list to a compatible manifest.
 
     Args:
@@ -232,17 +236,14 @@ class FromRegistry(DockerImageList):
     self._accepted_mimes = accepted_mimes
     self._response = {}
 
-  def _content(
-      self,
-      suffix,
-      accepted_mimes = None,
-      cache = True
-  ):
+  def _content(self,
+               suffix,
+               accepted_mimes = None,
+               cache = True):
     """Fetches content of the resources from registry by http calls."""
     if isinstance(self._name, docker_name.Repository):
       suffix = '{repository}/{suffix}'.format(
-          repository=self._name.repository,
-          suffix=suffix)
+          repository=self._name.repository, suffix=suffix)
 
     if suffix in self._response:
       return self._response[suffix]
@@ -252,7 +253,7 @@ class FromRegistry(DockerImageList):
             scheme=docker_http.Scheme(self._name.registry),
             registry=self._name.registry,
             suffix=suffix),
-        accepted_codes=[httplib.OK],
+        accepted_codes=[six.moves.http_client.OK],
         accepted_mimes=accepted_mimes)
     if cache:
       self._response[suffix] = content
@@ -287,14 +288,14 @@ class FromRegistry(DockerImageList):
 
   def resolve_all(
       self, target = None):
-    results = self.resolve_all_unordered(target).items()
+    results = list(self.resolve_all_unordered(target).items())
     # Sort by name (which is equivalent as by digest) for deterministic output.
     # We could let resolve_all_unordered() to return only a list of image, then
     # use image.digest() as the sort key, but FromRegistry.digest() will
     # eventually leads to another round trip call to registry. This inefficiency
     # becomes worse as the image list has more children images. So we let
     # resolve_all_unordered() to return both image names and images.
-    results.sort(key=lambda (name, image): str(name))
+    results.sort(key=lambda name_image: str(name_image[0]))
     return [image for (_, image) in results]
 
   def resolve_all_unordered(
@@ -326,7 +327,7 @@ class FromRegistry(DockerImageList):
       manifest = json.loads(self.manifest(validate=False))
       return manifest['schemaVersion'] == 2 and 'manifests' in manifest
     except docker_http.V2DiagnosticException as err:
-      if err.status == httplib.NOT_FOUND:
+      if err.status == six.moves.http_client.NOT_FOUND:
         return False
       raise
 
@@ -335,7 +336,8 @@ class FromRegistry(DockerImageList):
     # GET server1/v2/<name>/manifests/<tag_or_digest>
 
     if isinstance(self._name, docker_name.Tag):
-      return self._content('manifests/' + self._name.tag, self._accepted_mimes)
+      return self._content('manifests/' + self._name.tag,
+                           self._accepted_mimes).decode('utf8')
     else:
       assert isinstance(self._name, docker_name.Digest)
       c = self._content('manifests/' + self._name.digest, self._accepted_mimes)
@@ -344,7 +346,7 @@ class FromRegistry(DockerImageList):
         raise DigestMismatchedError(
             'The returned manifest\'s digest did not match requested digest, '
             '%s vs. %s' % (self._name.digest, computed))
-      return c
+      return c.decode('utf8')
 
   # __enter__ and __exit__ allow use as a context manager.
   def __enter__(self):
@@ -367,8 +369,7 @@ class FromRegistry(DockerImageList):
 class FromList(DockerImageList):
   """This synthesizes a Manifest List from a list of images."""
 
-  def __init__(self,
-               images):
+  def __init__(self, images):
     self._images = images
 
   def manifest(self):
@@ -390,7 +391,6 @@ class FromList(DockerImageList):
       list_body['manifests'].append(manifest_body)
     return json.dumps(list_body, sort_keys=True)
 
-  # pytype: disable=bad-return-type
   def resolve_all(
       self, target = None):
     """Resolves a manifest list to a list of compatible manifests.

@@ -13,7 +13,9 @@
 # limitations under the License.
 """This package pushes images to a Docker Registry."""
 
+from __future__ import absolute_import
 
+from __future__ import print_function
 
 import argparse
 import logging
@@ -35,18 +37,23 @@ import httplib2
 parser = argparse.ArgumentParser(
     description='Push images to a Docker Registry.')
 
-parser.add_argument('--name', action='store',
-                    help=('The name of the docker image to push.'))
+parser.add_argument(
+    '--name', action='store', help='The name of the docker image to push.',
+    required=True)
 
-parser.add_argument('--tarball', action='store',
-                    help='Where to load the image tarball.')
+parser.add_argument(
+    '--tarball', action='store', help='Where to load the image tarball.',
+    required=True)
 
-parser.add_argument('--stamp-info-file', action='append', required=False,
-                    help=('A list of files from which to read substitutions '
-                          'to make in the provided --name, e.g. {BUILD_USER}'))
+parser.add_argument(
+    '--stamp-info-file',
+    action='append',
+    required=False,
+    help=('A list of files from which to read substitutions '
+          'to make in the provided --name, e.g. {BUILD_USER}'))
 
-parser.add_argument('--oci', action='store_true',
-                    help='Push the image with an OCI Manifest.')
+parser.add_argument(
+    '--oci', action='store_true', help='Push the image with an OCI Manifest.')
 
 _THREADS = 8
 
@@ -60,8 +67,8 @@ def Tag(name, files):
         line = line.strip('\n')
         key, value = line.split(' ', 1)
         if key in format_args:
-          print ('WARNING: Duplicate value for key "%s": '
-                 'using "%s"' % (key, value))
+          print(('WARNING: Duplicate value for key "%s": '
+                 'using "%s"' % (key, value)))
         format_args[key] = value
 
   formatted_name = name.format(**format_args)
@@ -73,10 +80,6 @@ def main():
   logging_setup.DefineCommandLineArgs(parser)
   args = parser.parse_args()
   logging_setup.Init(args=args)
-
-  if not args.name or not args.tarball:
-    logging.fatal('--name and --tarball are required arguments.')
-    sys.exit(1)
 
   retry_factory = retry.Factory()
   retry_factory = retry_factory.WithSourceTransportCallable(httplib2.Http)
@@ -110,8 +113,8 @@ def main():
           session.upload(v2_2_img)
           digest = v2_2_img.digest()
 
-        print('{name} was published with digest: {digest}'.format(
-            name=name, digest=digest))
+        print(('{name} was published with digest: {digest}'.format(
+            name=name, digest=digest)))
     # pylint: disable=broad-except
     except Exception as e:
       logging.fatal('Error publishing %s: %s', name, e)

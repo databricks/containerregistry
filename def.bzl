@@ -12,30 +12,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
 def repositories():
-  native.new_http_archive(
-      name = "httplib2",
-      url = "https://codeload.github.com/httplib2/httplib2/tar.gz/v0.10.3",
-      sha256 = "d1bee28a68cc665c451c83d315e3afdbeb5391f08971dcc91e060d5ba16986f1",
-      strip_prefix = "httplib2-0.10.3/python2/httplib2/",
-      type = "tar.gz",
-      build_file_content = """
+    """Load bazel dependencies."""
+
+    http_archive(
+        name = "httplib2",
+        url = "https://codeload.github.com/httplib2/httplib2/tar.gz/v0.17.0",
+        sha256 = "556aa045aefeed3fd58a003251c94627e077ab0732758e5178a0074d9c75a68b",
+        strip_prefix = "httplib2-0.17.0/python3/httplib2/",
+        type = "tar.gz",
+        build_file_content = """
 py_library(
    name = "httplib2",
    srcs = glob(["**/*.py"]),
    data = ["cacerts.txt"],
    visibility = ["//visibility:public"]
 )""",
-  )
+    )
 
-  # Used by oauth2client
-  native.new_http_archive(
-      name = "six",
-      url = "https://pypi.python.org/packages/source/s/six/six-1.9.0.tar.gz",
-      sha256 = "e24052411fc4fbd1f672635537c3fc2330d9481b18c0317695b46259512c91d5",
-      strip_prefix = "six-1.9.0/",
-      type = "tar.gz",
-      build_file_content = """
+    # Used by oauth2client
+    http_archive(
+        name = "six",
+        url = "https://pypi.python.org/packages/source/s/six/six-1.9.0.tar.gz",
+        sha256 = "e24052411fc4fbd1f672635537c3fc2330d9481b18c0317695b46259512c91d5",
+        strip_prefix = "six-1.9.0/",
+        type = "tar.gz",
+        build_file_content = """
 # Rename six.py to __init__.py
 genrule(
     name = "rename",
@@ -47,17 +52,17 @@ py_library(
    name = "six",
    srcs = [":__init__.py"],
    visibility = ["//visibility:public"],
-)"""
-  )
+)""",
+    )
 
-  # Used for authentication in containerregistry
-  native.new_http_archive(
-      name = "oauth2client",
-      url = "https://codeload.github.com/google/oauth2client/tar.gz/v4.0.0",
-      sha256 = "7230f52f7f1d4566a3f9c3aeb5ffe2ed80302843ce5605853bee1f08098ede46",
-      strip_prefix = "oauth2client-4.0.0/oauth2client/",
-      type = "tar.gz",
-      build_file_content = """
+    # Used for authentication in containerregistry
+    http_archive(
+        name = "oauth2client",
+        url = "https://codeload.github.com/google/oauth2client/tar.gz/v4.0.0",
+        sha256 = "7230f52f7f1d4566a3f9c3aeb5ffe2ed80302843ce5605853bee1f08098ede46",
+        strip_prefix = "oauth2client-4.0.0/oauth2client/",
+        type = "tar.gz",
+        build_file_content = """
 py_library(
    name = "oauth2client",
    srcs = glob(["**/*.py"]),
@@ -66,27 +71,20 @@ py_library(
      "@httplib2//:httplib2",
      "@six//:six",
    ]
-)"""
-  )
+)""",
+    )
 
-  # Used for parallel execution in containerregistry
-  native.new_http_archive(
-      name = "concurrent",
-      url = "https://codeload.github.com/agronholm/pythonfutures/tar.gz/3.0.5",
-      sha256 = "a7086ddf3c36203da7816f7e903ce43d042831f41a9705bc6b4206c574fcb765",
-      strip_prefix = "pythonfutures-3.0.5/concurrent/",
-      type = "tar.gz",
-      build_file_content = """
-py_library(
-   name = "concurrent",
-   srcs = glob(["**/*.py"]),
-   visibility = ["//visibility:public"]
-)"""
-  )
+    # For subpar.
+    http_archive(
+        name = "rules_python",
+        url = "https://github.com/bazelbuild/rules_python/releases/download/0.0.1/rules_python-0.0.1.tar.gz",
+        sha256 = "aa96a691d3a8177f3215b14b0edc9641787abaaa30363a080165d06ab65e1161",
+    )
 
-  # For packaging python tools.
-  native.git_repository(
-      name = "subpar",
-      remote = "https://github.com/google/subpar",
-      commit = "7e12cc130eb8f09c8cb02c3585a91a4043753c56",
-  )
+    # For packaging python tools.
+    git_repository(
+        name = "subpar",
+        remote = "https://github.com/google/subpar",
+        commit = "9fae6b63cfeace2e0fb93c9c1ebdc28d3991b16f",  # 2019-08-14
+        shallow_since = "1565833028 -0400",
+    )

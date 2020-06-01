@@ -11,21 +11,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """This package facilitates HTTP/REST requests to the registry."""
 
+from __future__ import absolute_import
+from __future__ import division
 
+from __future__ import print_function
 
-import httplib
 import json
 import re
 import threading
-import urllib
 
 from containerregistry.client import docker_creds
 from containerregistry.client import docker_name
 from containerregistry.client.v2_2 import docker_creds as v2_2_creds
 import httplib2
+import six.moves.http_client
+import six.moves.urllib.parse
 
 # Options for docker_http.Transport actions
 PULL = 'pull'
@@ -36,16 +38,19 @@ CATALOG = 'catalog'
 ACTIONS = [PULL, PUSH, DELETE, CATALOG]
 
 MANIFEST_SCHEMA1_MIME = 'application/vnd.docker.distribution.manifest.v1+json'
-MANIFEST_SCHEMA1_SIGNED_MIME = (
-    'application/vnd.docker.distribution.manifest.v1+prettyjws')
+MANIFEST_SCHEMA1_SIGNED_MIME = 'application/vnd.docker.distribution.manifest.v1+prettyjws'  # pylint disable=line-too-long
 MANIFEST_SCHEMA2_MIME = 'application/vnd.docker.distribution.manifest.v2+json'
 MANIFEST_LIST_MIME = 'application/vnd.docker.distribution.manifest.list.v2+json'
 LAYER_MIME = 'application/vnd.docker.image.rootfs.diff.tar.gzip'
+FOREIGN_LAYER_MIME = 'application/vnd.docker.image.rootfs.foreign.diff.tar.gzip'
 CONFIG_JSON_MIME = 'application/vnd.docker.container.image.v1+json'
 
 OCI_MANIFEST_MIME = 'application/vnd.oci.image.manifest.v1+json'
 OCI_IMAGE_INDEX_MIME = 'application/vnd.oci.image.index.v1+json'
-OCI_LAYER_MIME = 'application/vnd.oci.image.layer.v1.tar+gzip'
+OCI_LAYER_MIME = 'application/vnd.oci.image.layer.v1.tar'
+OCI_GZIP_LAYER_MIME = 'application/vnd.oci.image.layer.v1.tar+gzip'
+OCI_NONDISTRIBUTABLE_LAYER_MIME = 'application/vnd.oci.image.layer.nondistributable.v1.tar'  # pylint disable=line-too-long
+OCI_NONDISTRIBUTABLE_GZIP_LAYER_MIME = 'application/vnd.oci.image.layer.nondistributable.v1.tar+gzip'  # pylint disable=line-too-long
 OCI_CONFIG_JSON_MIME = 'application/vnd.oci.image.config.v1+json'
 
 MANIFEST_SCHEMA1_MIMES = [MANIFEST_SCHEMA1_MIME, MANIFEST_SCHEMA1_SIGNED_MIME]
@@ -57,6 +62,12 @@ SUPPORTED_MANIFEST_MIMES = [OCI_MANIFEST_MIME, MANIFEST_SCHEMA2_MIME]
 
 # OCI Image Index and Manifest List are compatible formats.
 MANIFEST_LIST_MIMES = [OCI_IMAGE_INDEX_MIME, MANIFEST_LIST_MIME]
+
+# Docker & OCI layer mime types indicating foreign/non-distributable layers.
+NON_DISTRIBUTABLE_LAYER_MIMES = [
+    FOREIGN_LAYER_MIME, OCI_NONDISTRIBUTABLE_LAYER_MIME,
+    OCI_NONDISTRIBUTABLE_GZIP_LAYER_MIME
+]
 
 
 class Diagnostic(object):
@@ -92,10 +103,17 @@ class Diagnostic(object):
 
 
 def _DiagnosticsFromContent(content):
+  """Extract and return the diagnostics from content."""
+  try:
+    content = content.decode('utf8')
+  except:  # pylint: disable=bare-except
+    # Assume it's already decoded. Defensive coding for old py2 habits that
+    # are hard to break. Passing does not make the problem worse.
+    pass
   try:
     o = json.loads(content)
     return [Diagnostic(d) for d in o.get('errors', [])]
-  except:
+  except:  # pylint: disable=bare-except
     return [Diagnostic({
         'code': 'UNKNOWN',
         'message': content,
@@ -105,14 +123,12 @@ def _DiagnosticsFromContent(content):
 class V2DiagnosticException(Exception):
   """Exceptions when an unexpected HTTP status is returned."""
 
-  def __init__(
-      self,
-      resp,
-      content):
+  def __init__(self, resp, content):
     self._resp = resp
     self._diagnostics = _DiagnosticsFromContent(content)
-    message = '\n'.join(['response: %s' % resp] + [
-        '%s: %s' % (d.message, d.detail) for d in self._diagnostics])
+    message = '\n'.join(
+        ['response: %s' % resp] +
+        ['%s: %s' % (d.message, d.detail) for d in self._diagnostics])
     super(V2DiagnosticException, self).__init__(message)
 
   @property
@@ -136,10 +152,7 @@ class TokenRefreshException(BadStateException):
   """Exception when token refresh fails."""
 
 
-def _CheckState(
-    predicate,
-    message=None
-):
+def _CheckState(predicate, message = None):
   if not predicate:
     raise BadStateException(message if message else 'Unknown')
 
@@ -176,12 +189,9 @@ class Transport(object):
      action: One of docker_http.ACTIONS, for which we plan to use this transport
   """
 
-  def __init__(
-      self,
-      name,
-      creds,
-      transport,
-      action):
+  def __init__(self, name,
+               creds,
+               transport, action):
     self._name = name
     self._basic_creds = creds
     self._transport = transport
@@ -222,12 +232,14 @@ class Transport(object):
         headers=headers)
 
     # We expect a www-authenticate challenge.
-    _CheckState(resp.status in [httplib.OK, httplib.UNAUTHORIZED],
-                'Unexpected response pinging the registry: {}\nBody: {}'.format(
-                    resp.status, content or '<empty>'))
+    _CheckState(
+        resp.status in [
+            six.moves.http_client.OK, six.moves.http_client.UNAUTHORIZED
+        ], 'Unexpected response pinging the registry: {}\nBody: {}'.format(
+            resp.status, content or '<empty>'))
 
     # The registry is authenticated iff we have an authentication challenge.
-    if resp.status == httplib.OK:
+    if resp.status == six.moves.http_client.OK:
       self._authentication = _ANONYMOUS
       self._service = 'none'
       self._realm = 'none'
@@ -245,8 +257,8 @@ class Transport(object):
     self._authentication = self._authentication.capitalize()
 
     _CheckState(self._authentication in [_BASIC, _BEARER],
-                'Unexpected "www-authenticate" challenge type: %s'
-                % self._authentication)
+                'Unexpected "www-authenticate" challenge type: %s' %
+                self._authentication)
 
     # Default "_service" to the registry
     self._service = self._name.registry
@@ -293,32 +305,38 @@ class Transport(object):
         # 'realm' includes scheme and path
         '{realm}?{query}'.format(
             realm=self._realm,
-            query=urllib.urlencode(parameters)),
-        'GET', body=None, headers=headers)
+            query=six.moves.urllib.parse.urlencode(parameters)),
+        'GET',
+        body=None,
+        headers=headers)
 
-    if resp.status != httplib.OK:
+    if resp.status != six.moves.http_client.OK:
       raise TokenRefreshException('Bad status during token exchange: %d\n%s' %
                                   (resp.status, content))
 
+    try:
+      content = content.decode('utf8')
+    except:  # pylint: disable=bare-except
+      # Assume it's already decoded. Defensive coding for old py2 habits that
+      # are hard to break. Passing does not make the problem worse.
+      pass
     wrapper_object = json.loads(content)
     token = wrapper_object.get('token') or wrapper_object.get('access_token')
-    _CheckState(token is not None,
-                'Malformed JSON response: %s' % content)
+    _CheckState(token is not None, 'Malformed JSON response: %s' % content)
 
     with self._lock:
       # We have successfully reauthenticated.
       self._creds = v2_2_creds.Bearer(token)
 
   # pylint: disable=invalid-name
-  def Request(
-      self,
-      url,
-      accepted_codes=None,
-      method=None,
-      body=None,
-      content_type=None,
-      accepted_mimes=None
-  ):
+  def Request(self,
+              url,
+              accepted_codes = None,
+              method = None,
+              body = None,
+              content_type = None,
+              accepted_mimes = None
+             ):
     """Wrapper containing much of the boilerplate REST logic for Registry calls.
 
     Args:
@@ -343,7 +361,7 @@ class Transport(object):
 
     # If the first request fails on a 401 Unauthorized, then refresh the
     # Bearer token and retry, if the authentication mode is bearer.
-    for retry in [self._authentication == _BEARER, False]:
+    for retry_unauthorized in [self._authentication == _BEARER, False]:
       # self._creds may be changed by self._Refresh(), so do
       # not hoist this.
       headers = {
@@ -354,8 +372,8 @@ class Transport(object):
         headers['Authorization'] = auth
 
       if body:  # Requests w/ bodies should have content-type.
-        headers['content-type'] = (content_type if content_type else
-                                   'application/json')
+        headers['content-type'] = (
+            content_type if content_type else 'application/json')
 
       if accepted_mimes is not None:
         headers['Accept'] = ','.join(accepted_mimes)
@@ -367,11 +385,12 @@ class Transport(object):
       resp, content = self._transport.request(
           url, method, body=body, headers=headers)
 
-      if resp.status != httplib.UNAUTHORIZED:
-        break
-      elif retry:
+      if (retry_unauthorized and
+          resp.status == six.moves.http_client.UNAUTHORIZED):
         # On Unauthorized, refresh the credential and retry.
         self._Refresh()
+        continue
+      break
 
     if resp.status not in accepted_codes:
       # Use the content returned by GCR as the error message.
@@ -379,14 +398,13 @@ class Transport(object):
 
     return resp, content
 
-  def PaginatedRequest(
-      self,
-      url,
-      accepted_codes=None,
-      method=None,
-      body=None,
-      content_type=None
-  ):
+  def PaginatedRequest(self,
+                       url,
+                       accepted_codes = None,
+                       method = None,
+                       body = None,
+                       content_type = None
+                      ):
     """Wrapper around Request that follows Link headers if they exist.
 
     Args:
@@ -403,16 +421,14 @@ class Transport(object):
     next_page = url
 
     while next_page:
-      resp, content = self.Request(next_page, accepted_codes, method,
-                                   body, content_type)
+      resp, content = self.Request(next_page, accepted_codes, method, body,
+                                   content_type)
       yield resp, content
 
       next_page = ParseNextLinkHeader(resp)
 
 
-def ParseNextLinkHeader(
-    resp
-):
+def ParseNextLinkHeader(resp):
   """Returns "next" link from RFC 5988 Link header or None if not present."""
   link = resp.get('link')
   if not link:

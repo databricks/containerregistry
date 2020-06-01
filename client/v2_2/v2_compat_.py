@@ -11,17 +11,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """This package provides compatibility interfaces for v1/v2."""
 
+from __future__ import absolute_import
+from __future__ import division
 
+from __future__ import print_function
 
-import hashlib
 import json
 
 import concurrent.futures
 from containerregistry.client.v2 import docker_image as v2_image
 from containerregistry.client.v2 import util as v2_util
+from containerregistry.client.v2_2 import docker_digest
 from containerregistry.client.v2_2 import docker_http
 from containerregistry.client.v2_2 import docker_image as v2_2_image
 
@@ -31,12 +33,8 @@ class BadDigestException(Exception):
   """Exceptions when a bad digest is supplied."""
 
 
-EMPTY_TAR_DIGEST = (
-    'sha256:a3ed95caeb02ffe68cdd9fd84406680ae93d633cb16422d00e8a7c22955b46d4')
-
-EMPTY_TAR_BYTES = (
-    b'\x1f\x8b\x08\x00\x00\tn\x88\x00\xffb\x18\x05\xa3`\x14\x8cX\x00'
-    '\x08\x00\x00\xff\xff.\xaf\xb5\xef\x00\x04\x00\x00')
+EMPTY_TAR_DIGEST = 'sha256:a3ed95caeb02ffe68cdd9fd84406680ae93d633cb16422d00e8a7c22955b46d4'
+EMPTY_TAR_BYTES = b'\x1f\x8b\x08\x00\x00\tn\x88\x00\xffb\x18\x05\xa3`\x14\x8cX\x00\x08\x00\x00\xff\xff.\xaf\xb5\xef\x00\x04\x00\x00'  # pylint: disable=line-too-long
 
 
 
@@ -47,10 +45,8 @@ EMPTY_TAR_BYTES = (
 # is wasteful because we don't actually need them if we are just going to
 # re-save the image.  While we don't provide it here, this can be used to
 # synthesize a v2.2 config_file directly from a v1.docker_image.DockerImage.
-def config_file(
-    v1_compats,
-    diff_ids
-):
+def config_file(v1_compats,
+                diff_ids):
   """Compute the v2.2 config file given the history and diff ids."""
   # We want the first (last reversed) v1 compatibility field, from which
   # we will draw additional fields.
@@ -64,7 +60,7 @@ def config_file(
     history = {}
     if 'container_config' in v1_compatibility:
       container_config = v1_compatibility.get('container_config')
-      if container_config.get('Cmd'):
+      if container_config.get('Cmd'):  # pytype: disable=attribute-error
         history['created_by'] = container_config['Cmd'][0]
 
     if 'created' in v1_compatibility:
@@ -80,8 +76,10 @@ def config_file(
       }
   }
 
-  for key in ['architecture', 'config', 'container', 'container_config',
-              'docker_version', 'os']:
+  for key in [
+      'architecture', 'config', 'container', 'container_config',
+      'docker_version', 'os'
+  ]:
     if key in v1_compatibility:
       config[key] = v1_compatibility[key]
 
@@ -111,13 +109,10 @@ class V22FromV2(v2_2_image.DockerImage):
     raw_manifest_schema1 = self._v2_image.manifest()
     manifest_schema1 = json.loads(raw_manifest_schema1)
 
-    # Compute the config_file for the v2.2 image.
-    # TODO(b/62576117): Remove the pytype disable.
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
       diff_id_futures = [
           executor.submit(self._GetDiffId, digest)
-          for digest in reversed(
-              self._v2_image.fs_layers())  # pytype: disable=wrong-arg-types
+          for digest in reversed(self._v2_image.fs_layers())
       ]
 
       diff_ids = [f.result() for f in diff_id_futures]
@@ -127,10 +122,11 @@ class V22FromV2(v2_2_image.DockerImage):
         for history in reversed(manifest_schema1.get('history', []))
     ], diff_ids)
 
+    config_bytes = self._config_file.encode('utf8')
     config_descriptor = {
         'mediaType': docker_http.CONFIG_JSON_MIME,
-        'size': len(self._config_file),
-        'digest': 'sha256:' + hashlib.sha256(self._config_file).hexdigest()
+        'size': len(config_bytes),
+        'digest': docker_digest.SHA256(config_bytes)
     }
 
     manifest_schema2 = {
@@ -148,13 +144,9 @@ class V22FromV2(v2_2_image.DockerImage):
     }
     self._manifest = json.dumps(manifest_schema2, sort_keys=True)
 
-  def _GetDiffId(
-      self,
-      digest
-  ):
+  def _GetDiffId(self, digest):
     """Hash the uncompressed layer blob."""
-    return 'sha256:' + hashlib.sha256(
-        self._v2_image.uncompressed_blob(digest)).hexdigest()
+    return docker_digest.SHA256(self._v2_image.uncompressed_blob(digest))
 
   def manifest(self):
     """Override."""
@@ -212,7 +204,7 @@ class V2FromV22(v2_image.DockerImage):
     fs_layers = []
     v1_histories = []
     for v1_layer_index, history in enumerate(histories):
-      digest, v2_layer_index = self._GetSchema1LayerDigest(
+      digest, media_type, v2_layer_index = self._GetSchema1LayerDigest(
           history, layers, v1_layer_index, v2_layer_index)
 
       if v1_layer_index != layer_count - 1:
@@ -223,7 +215,7 @@ class V2FromV22(v2_image.DockerImage):
         v1_compatibility = self._BuildV1CompatibilityForTopLayer(
             layer_id, parent, history, config)
       parent = layer_id
-      fs_layers = [{'blobSum': digest}] + fs_layers
+      fs_layers = [{'blobSum': digest, 'mediaType': media_type}] + fs_layers
       v1_histories = [{'v1Compatibility': v1_compatibility}] + v1_histories
 
     manifest_schema1 = {
@@ -237,29 +229,23 @@ class V2FromV22(v2_image.DockerImage):
       manifest_schema1['architecture'] = config['architecture']
     self._manifest = v2_util.Sign(json.dumps(manifest_schema1, sort_keys=True))
 
-  def _GenerateV1LayerId(
-      self,
-      digest,
-      parent,
-      raw_config=None
-  ):
+  def _GenerateV1LayerId(self,
+                         digest,
+                         parent,
+                         raw_config = None):
     parts = digest.rsplit(':', 1)
     if len(parts) != 2:
       raise BadDigestException('Invalid Digest: %s, must be in '
                                'algorithm : blobSumHex format.' % (digest))
 
-    data = str(parts[1] + ' ' + parent)
+    data = parts[1] + ' ' + parent
 
     if raw_config:
-      data += ' ' + str(raw_config)
-    return hashlib.sha256(data).hexdigest()
+      data += ' ' + raw_config
+    return docker_digest.SHA256(data.encode('utf8'), '')
 
-  def _BuildV1Compatibility(
-      self,
-      layer_id,
-      parent,
-      history
-  ):
+  def _BuildV1Compatibility(self, layer_id, parent,
+                            history):
     v1_compatibility = {'id': layer_id}
 
     if parent:
@@ -269,9 +255,7 @@ class V2FromV22(v2_image.DockerImage):
       v1_compatibility['throwaway'] = True
 
     if 'created_by' in history:
-      v1_compatibility['container_config'] = {
-          'Cmd': [history['created_by']]
-      }
+      v1_compatibility['container_config'] = {'Cmd': [history['created_by']]}
 
     for key in ['created', 'comment', 'author']:
       if key in history:
@@ -279,13 +263,9 @@ class V2FromV22(v2_image.DockerImage):
 
     return json.dumps(v1_compatibility, sort_keys=True)
 
-  def _BuildV1CompatibilityForTopLayer(
-      self,
-      layer_id,
-      parent,
-      history,
-      config
-  ):
+  def _BuildV1CompatibilityForTopLayer(self, layer_id, parent,
+                                       history,
+                                       config):
     v1_compatibility = {'id': layer_id}
 
     if parent:
@@ -294,24 +274,26 @@ class V2FromV22(v2_image.DockerImage):
     if 'empty_layer' in history:
       v1_compatibility['throwaway'] = True
 
-    for key in ['architecture', 'container', 'docker_version', 'os', 'config',
-                'container_config', 'created']:
+    for key in [
+        'architecture', 'container', 'docker_version', 'os', 'config',
+        'container_config', 'created'
+    ]:
       if key in config:
         v1_compatibility[key] = config[key]
 
     return json.dumps(v1_compatibility, sort_keys=True)
 
   def _GetSchema1LayerDigest(
-      self,
-      history,
-      layers,
-      v1_layer_index,
-      v2_layer_index
-  ):
+      self, history, layers,
+      v1_layer_index, v2_layer_index):
     if 'empty_layer' in history:
-      return (EMPTY_TAR_DIGEST, v2_layer_index)
+      return (EMPTY_TAR_DIGEST, docker_http.LAYER_MIME, v2_layer_index)
     else:
-      return (layers[v2_layer_index]['digest'], v2_layer_index + 1)
+      return (
+          layers[v2_layer_index]['digest'],
+          layers[v2_layer_index]['mediaType'],
+          v2_layer_index + 1
+      )
 
   def manifest(self):
     """Override."""
@@ -323,6 +305,10 @@ class V2FromV22(v2_image.DockerImage):
       # See comment in blob().
       return super(V2FromV22, self).uncompressed_blob(EMPTY_TAR_DIGEST)
     return self._v2_2_image.uncompressed_blob(digest)
+
+  def diff_id(self, digest):
+    """Gets v22 diff_id."""
+    return self._v2_2_image.digest_to_diff_id(digest)
 
   def blob(self, digest):
     """Override."""

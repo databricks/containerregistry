@@ -13,7 +13,9 @@
 # limitations under the License.
 """This package manipulates v2.2 image configuration metadata."""
 
+from __future__ import absolute_import
 
+from __future__ import print_function
 
 from collections import namedtuple
 import copy
@@ -31,7 +33,7 @@ _OverridesT = namedtuple('OverridesT', [
 # Unix epoch 0, representable in 32 bits.
 _DEFAULT_TIMESTAMP = '1970-01-01T00:00:00Z'
 
-_EMPTY_LAYER = hashlib.sha256(''.encode('utf-8')).hexdigest()
+_EMPTY_LAYER = hashlib.sha256(b'').hexdigest()
 
 
 class Overrides(_OverridesT):
@@ -95,10 +97,7 @@ class Overrides(_OverridesT):
 
 
 # NOT THREADSAFE
-def _Resolve(
-    value,
-    environment
-):
+def _Resolve(value, environment):
   """Resolves environment variables embedded in the given value."""
   outer_env = os.environ
   try:
@@ -109,19 +108,16 @@ def _Resolve(
 
 
 # TODO(user): Use a typing.Generic?
-def _DeepCopySkipNull(
-    data
-):
+def _DeepCopySkipNull(data):
   """Do a deep copy, skipping null entry."""
   if isinstance(data, dict):
     return dict((_DeepCopySkipNull(k), _DeepCopySkipNull(v))
-                for k, v in six.iteritems(data) if v is not None)
+                for k, v in six.iteritems(data)
+                if v is not None)
   return copy.deepcopy(data)
 
 
-def _KeyValueToDict(
-    pair
-):
+def _KeyValueToDict(pair):
   """Converts an iterable object of key=value pairs to dictionary."""
   d = dict()
   for kv in pair:
@@ -130,18 +126,14 @@ def _KeyValueToDict(
   return d
 
 
-def _DictToKeyValue(
-    d
-):
+def _DictToKeyValue(d):
   return ['%s=%s' % (k, d[k]) for k in sorted(d.keys())]
 
 
-def Override(
-    data,
-    options,
-    architecture = 'amd64',
-    operating_system = 'linux'
-):
+def Override(data,
+             options,
+             architecture = 'amd64',
+             operating_system = 'linux'):
   """Create an image config possibly based on an existing one.
 
   Args:
@@ -163,9 +155,12 @@ def Override(
   output['architecture'] = architecture
   output['os'] = operating_system
 
+  if 'os.version' in defaults:
+    output['os.version'] = defaults['os.version']
+
   output['config'] = defaults.get('config', {})
 
-  # pytype: disable=attribute-error
+  # pytype: disable=attribute-error,unsupported-operands
   if options.entrypoint:
     output['config']['Entrypoint'] = options.entrypoint
   if options.cmd:
@@ -177,7 +172,7 @@ def Override(
     # Build a dictionary of existing environment variables (used by _Resolve).
     environ_dict = _KeyValueToDict(output['config'].get('Env', []))
     # Merge in new environment variables, resolving references.
-    for k, v in options.env.iteritems():
+    for k, v in six.iteritems(options.env):
       # Resolve handles scenarios like "PATH=$PATH:...".
       environ_dict[k] = _Resolve(v, environ_dict)
     output['config']['Env'] = _DictToKeyValue(environ_dict)
@@ -185,7 +180,7 @@ def Override(
   # TODO(user) Label is currently docker specific
   if options.labels:
     label_dict = output['config'].get('Labels', {})
-    for k, v in options.labels.iteritems():
+    for k, v in six.iteritems(options.labels):
       label_dict[k] = v
     output['config']['Labels'] = label_dict
 
@@ -209,17 +204,13 @@ def Override(
 
   if options.workdir:
     output['config']['WorkingDir'] = options.workdir
-  # pytype: enable=attribute-error
+  # pytype: enable=attribute-error,unsupported-operands
 
   # diff_ids are ordered from bottom-most to top-most
   diff_ids = defaults.get('rootfs', {}).get('diff_ids', [])
   if options.layers:
     layers = options.layers
-    diff_ids += [
-        'sha256:%s' % l
-        for l in layers
-        if l != _EMPTY_LAYER
-    ]
+    diff_ids += ['sha256:%s' % l for l in layers if l != _EMPTY_LAYER]
     output['rootfs'] = {
         'type': 'layers',
         'diff_ids': diff_ids,
