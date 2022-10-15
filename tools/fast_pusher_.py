@@ -24,6 +24,7 @@ from __future__ import print_function
 
 import argparse
 import logging
+import ssl
 import sys
 import os
 
@@ -81,6 +82,9 @@ parser.add_argument(
     '--oci', action='store_true', help='Push the image with an OCI Manifest.')
 
 parser.add_argument(
+    '--insecure', action='store_true', help='???')
+
+parser.add_argument(
     '--client-config-dir',
     action='store',
     help='The path to the directory where the client configuration files are '
@@ -119,9 +123,13 @@ def Tag(name, files):
   return docker_name.Tag(formatted_name)
 
 
+
 def main():
   logging_setup.DefineCommandLineArgs(parser)
   args = parser.parse_args()
+  if args.insecure:
+
+    ssl._create_default_https_context = ssl._create_unverified_context
   logging_setup.Init(args=args)
 
   # This library can support push-by-digest, but the likelihood of a user
