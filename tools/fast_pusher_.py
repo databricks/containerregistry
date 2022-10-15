@@ -231,6 +231,7 @@ def main():
             name=name, digest=digest)))
     # pylint: disable=broad-except
     except Exception as e:
+      raise
       logging.fatal('Error publishing %s: %s', name, e)
       sys.exit(1)
 
