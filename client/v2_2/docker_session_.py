@@ -88,6 +88,7 @@ class Push(object):
   def _blob_exists(self, digest):
     """Check the remote for the given layer."""
     # HEAD the blob, and check for a 200
+    logging.error('>>> _blob_exists')
     resp, unused_content = self._transport.Request(
         '{base_url}/blobs/{digest}'.format(
             base_url=self._base_url(), digest=digest),
@@ -154,6 +155,7 @@ class Push(object):
   # pylint: disable=missing-docstring
   def _patch_upload(self, image,
                     digest):
+    logging.error('>>> _patch_upload 1')
     mounted, location = self._start_upload(digest, self._mount)
 
     if mounted:
@@ -162,6 +164,7 @@ class Push(object):
 
     location = self._get_absolute_url(location)
 
+    logging.error('>>> _patch_upload 2')
     resp, unused_content = self._transport.Request(
         location,
         method='PATCH',
@@ -172,8 +175,10 @@ class Push(object):
             six.moves.http_client.CREATED
         ])
 
+    logging.error('>>> _patch_upload 3')
     location = self._add_digest(resp['location'], digest)
     location = self._get_absolute_url(location)
+    logging.error('>>> _patch_upload 4')
     self._transport.Request(
         location,
         method='PUT',
@@ -276,11 +281,15 @@ class Push(object):
 
   def _upload_one(self, image, digest):
     """Upload a single layer, after checking whether it exists already."""
+    logging.error('>>> UPLOAD_ONE 1')
     if self._blob_exists(digest):
+      logging.error('>>> UPLOAD_ONE 2')
       logging.info('Layer %s exists, skipping', digest)
       return
 
+    logging.error('>>> UPLOAD_ONE 3')
     self._put_blob(image, digest)
+    logging.error('>>> UPLOAD_ONE 4')
     logging.info('Layer %s pushed.', digest)
 
   def upload(self,
