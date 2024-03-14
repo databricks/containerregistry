@@ -584,6 +584,7 @@ class FromTarball(DockerImage):
   # Could be large, do not memoize
   def blob(self, digest):
     """Override."""
+    logging.error(">>> FromTarball.blob")
     if not self._blob_names:
       self._populate_manifest_and_blobs()
     if digest == self._config_blob:
@@ -804,6 +805,7 @@ class FromDisk(DockerImage):
   # Could be large, do not memoize
   def blob(self, digest):
     """Override."""
+    logging.error(">>> FromDisk.blob")
     if digest not in self._layer_to_filename:
       return self._legacy_base.blob(digest)
     with open(self._layer_to_filename[digest], 'rb') as reader:
