@@ -116,8 +116,11 @@ class Push(object):
     return resp.status == six.moves.http_client.OK  # pytype: disable=attribute-error
 
   def _get_blob(self, image, digest):
+    logging.error("_get_blob 1")
     if digest == image.config_blob():
+      logging.error("_get_blob 2")
       return image.config_file().encode('utf8')
+    logging.error("_get_blob 3")
     return image.blob(digest)
 
   def _monolithic_upload(self, image,
