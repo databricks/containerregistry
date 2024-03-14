@@ -284,15 +284,15 @@ class Push(object):
 
   def _upload_one(self, image, digest):
     """Upload a single layer, after checking whether it exists already."""
-    logging.error('>>> UPLOAD_ONE 1')
+    # logging.error('>>> UPLOAD_ONE 1')
     if self._blob_exists(digest):
-      logging.error('>>> UPLOAD_ONE 2')
+      # logging.error('>>> UPLOAD_ONE 2')
       logging.info('Layer %s exists, skipping', digest)
       return
 
-    logging.error('>>> UPLOAD_ONE 3')
+    # logging.error('>>> UPLOAD_ONE 3')
     self._put_blob(image, digest)
-    logging.error('>>> UPLOAD_ONE 4')
+    # logging.error('>>> UPLOAD_ONE 4')
     logging.info('Layer %s pushed.', digest)
 
   def upload(self,

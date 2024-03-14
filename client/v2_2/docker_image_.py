@@ -807,8 +807,11 @@ class FromDisk(DockerImage):
     """Override."""
     logging.error(">>> FromDisk.blob")
     if digest not in self._layer_to_filename:
+      logging.error(">>> FromDisk.blob 1")
       return self._legacy_base.blob(digest)
+    logging.error(">>> FromDisk.blob 2")
     with open(self._layer_to_filename[digest], 'rb') as reader:
+      logging.error(">>> FromDisk.blob 3")
       return reader.read()
 
   def blob_size(self, digest):
