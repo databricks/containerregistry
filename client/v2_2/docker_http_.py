@@ -22,6 +22,8 @@ import json
 import re
 import threading
 
+import logging
+
 from containerregistry.client import docker_creds
 from containerregistry.client import docker_name
 from containerregistry.client.v2_2 import docker_creds as v2_2_creds
@@ -356,6 +358,8 @@ class Transport(object):
     Returns:
       The response of the HTTP request, and its contents.
     """
+    logging.error(">>> Transport.Request 1")
+
     if not method:
       method = 'GET' if not body else 'PUT'
 
@@ -382,8 +386,12 @@ class Transport(object):
       if method in ('POST', 'PUT') and not body:
         headers['content-length'] = '0'
 
+      logging.error(">>> Transport.Request 2")
+
       resp, content = self._transport.request(
           url, method, body=body, headers=headers)
+      
+      logging.error(">>> Transport.Request 3")
 
       if (retry_unauthorized and
           resp.status == six.moves.http_client.UNAUTHORIZED):
@@ -391,6 +399,8 @@ class Transport(object):
         self._Refresh()
         continue
       break
+
+    logging.error(">>> Transport.Request 4")
 
     if resp.status not in accepted_codes:
       # Use the content returned by GCR as the error message.
