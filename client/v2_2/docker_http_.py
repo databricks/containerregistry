@@ -388,8 +388,19 @@ class Transport(object):
 
       logging.error(">>> Transport.Request 2")
 
-      resp, content = self._transport.request(
-          url, method, body=body, headers=headers)
+      if len(body) > 2**31-1:
+        logging.error(">>> Transport.Request TRY CHUNKS")
+        # Use httplib2 file object with chunks to upload large files.
+        import io
+        body_file = io.BytesIO(body)
+        logging.error(">>> Transport.Request TRY CHUNKS 2")
+        file_object = httplib2.FileObject(body_file, chunk_size=2**30)
+        logging.error(">>> Transport.Request TRY CHUNKS 3")
+        resp, content = self._transport.request(url, method, body=file_object, headers=headers)
+        logging.error(">>> Transport.Request TRY CHUNKS 4")
+      else:
+        resp, content = self._transport.request(
+            url, method, body=body, headers=headers)
       
       logging.error(">>> Transport.Request 3")
 
