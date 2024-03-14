@@ -410,7 +410,9 @@ def is_compressed(name):
 # content longer than 2^31 bytes. To work around this, we write the content in
 # smaller chunks if exceed size limit.
 def _write_large_content_to_zipped_file(zipped, content, chunk_size=2**31-1):
+  print('>>> content length: ', len(content), ', chunk size: ', chunk_size)
   if len(content) > chunk_size:
+    print('>>> writing content in chunks')
     # Write the content in chunks
     for i in range(0, len(content), chunk_size):
       zipped.write(content[i:i+chunk_size])
@@ -444,17 +446,22 @@ class FromTarball(DockerImage):
                memoize = True,
                should_be_compressed = False):
     """Fetches a particular path's contents from the tarball."""
+    print('>>> _content 1')
+
     # Check our cache
     if memoize:
       with self._lock:
         if (name, should_be_compressed) in self._memoize:
           return self._memoize[(name, should_be_compressed)]
+        
+    print('>>> _content 2')
 
     # tarfile is inherently single-threaded:
     # https://mail.python.org/pipermail/python-bugs-list/2015-March/265999.html
     # so instead of locking, just open the tarfile for each file
     # we want to read.
     with tarfile.open(name=self._tarball, mode='r') as tar:
+      print('>>> _content 3')
       try:
         # If the layer is compressed and we need to return compressed
         # or if it's uncompressed and we need to return uncompressed
@@ -464,19 +471,23 @@ class FromTarball(DockerImage):
       except KeyError:
         content = tar.extractfile(
             str('./' + name)).read()  # pytype: disable=attribute-error
+      print('>>> _content 4')
       # We need to compress before returning. Use gzip.
       if should_be_compressed and not is_compressed(content):
         buf = io.BytesIO()
         zipped = gzip.GzipFile(
             mode='wb', compresslevel=self._compresslevel, fileobj=buf)
         try:
+          print('>>> _content 5')
           _write_large_content_to_zipped_file(zipped, content)
+          print('>>> _content 6')
         finally:
           zipped.close()
         content = buf.getvalue()
       # The layer is gzipped but we need to return the uncompressed content
       # Open up the gzip and read the contents after.
       elif not should_be_compressed and is_compressed(content):
+        print('>>> _content 7')
         buf = io.BytesIO(content)
         raw = gzip.GzipFile(mode='rb', fileobj=buf)
         content = raw.read()
@@ -484,6 +495,7 @@ class FromTarball(DockerImage):
       if memoize:
         with self._lock:
           self._memoize[(name, should_be_compressed)] = content
+      print('>>> _content 8')
       return content
 
   def _gzipped_content(self, name):
