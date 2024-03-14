@@ -388,7 +388,8 @@ class Transport(object):
 
       logging.error(">>> Transport.Request 2")
 
-      if body and len(body) > 2**31-1 and method == 'PUT':
+      # Should have been 2**31-1, but we need space for other headers.
+      if body and len(body) > 2**30 and method == 'PUT':
         logging.error(">>> Transport.Request TRY CHUNKS")
         # Use httplib2 file object with chunks to upload large files.
         import io
