@@ -292,9 +292,12 @@ class Push(object):
       image: the image to upload.
       use_digest: use the manifest digest (i.e. not tag) as the image reference.
     """
+    logging.info('>>> UPLOAD 1')
+
     # If the manifest (by digest) exists, then avoid N layer existence
     # checks (they must exist).
     if self._manifest_exists(image):
+      logging.info('>>> UPLOAD 2.1')
       if isinstance(self._name, docker_name.Tag):
         if self._remote_tag_digest(image) == image.digest():
           logging.info('Tag points to the right manifest, skipping push.')
@@ -303,14 +306,17 @@ class Push(object):
       else:
         logging.info('Manifest exists, skipping upload.')
     elif isinstance(image, image_list.DockerImageList):
+      logging.info('>>> UPLOAD 2.2')
       for _, child in image:
         # TODO(user): Refactor so that the threadpool is shared.
         with child:
           self.upload(child, use_digest=True)
     elif self._threads == 1:
+      logging.info('>>> UPLOAD 2.3')
       for digest in image.distributable_blob_set():
         self._upload_one(image, digest)
     else:
+      logging.info('>>> UPLOAD 2.4')
       with concurrent.futures.ThreadPoolExecutor(
           max_workers=self._threads) as executor:
         future_to_params = {
@@ -320,6 +326,7 @@ class Push(object):
         for future in concurrent.futures.as_completed(future_to_params):
           future.result()
 
+    logging.info('>>> UPLOAD 3')
     # This should complete the upload by uploading the manifest.
     self._put_manifest(image, use_digest=use_digest)
 
@@ -328,6 +335,7 @@ class Push(object):
     return self
 
   def __exit__(self, exception_type, unused_value, unused_traceback):
+    logging.info('>>> VERIFYING LOCAL CHANGES')
     if exception_type:
       logging.error('Error during upload of: %s', self._name)
       return
