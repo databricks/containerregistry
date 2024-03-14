@@ -399,6 +399,7 @@ class Transport(object):
         resp, content = self._transport.request(url, method, body=file_object, headers=headers)
         logging.error(">>> Transport.Request TRY CHUNKS 4")
       else:
+        logging.error(">>> Transport.Request NO CHUNKS. Body size: %s" % (0 if not body else len(body)))
         resp, content = self._transport.request(
             url, method, body=body, headers=headers)
       
