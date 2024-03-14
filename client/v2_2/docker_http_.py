@@ -389,7 +389,7 @@ class Transport(object):
       logging.error(">>> Transport.Request 2")
 
       # Should have been 2**31-1, but we need space for other headers.
-      if body and len(body) > 2**30 and method == 'PUT':
+      if body and len(body) > 2000000000 and method == 'PUT':
         logging.error(">>> Transport.Request TRY CHUNKS")
         # Use httplib2 file object with chunks to upload large files.
         import io
@@ -400,7 +400,7 @@ class Transport(object):
         resp, content = self._transport.request(url, method, body=file_object, headers=headers)
         logging.error(">>> Transport.Request TRY CHUNKS 4")
       else:
-        logging.error(">>> Transport.Request NO CHUNKS. Body size: %s" % (0 if not body else len(body)))
+        logging.error(">>> Transport.Request NO CHUNKS. METHOD: %s, Body size: %s" % (method, 0 if not body else len(body)))
         resp, content = self._transport.request(
             url, method, body=body, headers=headers)
       
