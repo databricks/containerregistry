@@ -812,7 +812,9 @@ class FromDisk(DockerImage):
     logging.error(">>> FromDisk.blob 2")
     with open(self._layer_to_filename[digest], 'rb') as reader:
       logging.error(">>> FromDisk.blob 3")
-      return reader.read()
+      ret = reader.read()
+      logging.error(">>> FromDisk.blob 4")
+      return ret
 
   def blob_size(self, digest):
     """Override."""
