@@ -391,14 +391,8 @@ class Transport(object):
       # Should have been 2**31-1, but we need space for other headers.
       if body and len(body) > 2000000000 and method in ('PUT', 'PATCH', 'POST'):
         logging.error(">>> Transport.Request TRY CHUNKS")
-        # Use httplib2 file object with chunks to upload large files.
-        import io
-        body_file = io.BytesIO(body)
-        logging.error(">>> Transport.Request TRY CHUNKS 2")
-        file_object = httplib2.FileObject(body_file, chunk_size=2**30)
-        logging.error(">>> Transport.Request TRY CHUNKS 3")
-        resp, content = self._transport.request(url, method, body=file_object, headers=headers)
-        logging.error(">>> Transport.Request TRY CHUNKS 4")
+        resp, content = send_large_body_in_chunks(url, method, body, headers, httplib2_transport=self._transport)
+        logging.error(">>> Transport.Request TRY CHUNKS DONE")
       else:
         logging.error(">>> Transport.Request NO CHUNKS. METHOD: %s, Body size: %s" % (method, 0 if not body else len(body)))
         resp, content = self._transport.request(
@@ -472,3 +466,56 @@ def Scheme(endpoint):
     return 'http'
   else:
     return 'https'
+
+
+def send_large_body_in_chunks(url, method, body, headers={}, chunk_size=2000000000, httplib2_transport=None):
+    from urllib.parse import urlparse
+    import http.client
+    import ssl
+    
+    # Parse the URL to get the host and path
+    parsed_url = urlparse(url)
+    host = parsed_url.netloc
+    path = parsed_url.path
+
+    # Create a connection to the host
+    if parsed_url.scheme == 'https':
+      ssl_context = ssl.create_default_context()
+      if httplib2_transport:
+        for (key, cert, _password) in httplib2_transport.certificates.iter(host):
+          ssl_context.load_cert_chain(certfile=cert, keyfile=key)
+      conn = http.client.HTTPSConnection(host, context=ssl_context)
+    else:
+      conn = http.client.HTTPConnection(host)
+
+    # Start the request
+    conn.putrequest(method, path)
+
+    # Set the headers
+    for key, value in headers.items():
+        conn.putheader(key, value)
+
+    # Enable chunked transfer encoding
+    conn.putheader('Transfer-Encoding', 'chunked')
+
+    # End the headers
+    conn.endheaders()
+
+    # Send the body in chunks
+    for i in range(0, len(body), chunk_size):
+        chunk = body[i:i+chunk_size]
+        conn.send(('%X\r\n' % len(chunk)).encode())
+        conn.send(chunk)
+        conn.send('\r\n'.encode())
+
+    # Send zero-length chunk to signal end
+    conn.send('0\r\n\r\n'.encode())
+
+    # Get the response
+    response = conn.getresponse()
+    content = response.read()
+
+    # Close the connection
+    conn.close()
+
+    return response, content
