@@ -194,8 +194,9 @@ class Push(object):
               six.moves.http_client.NO_CONTENT, six.moves.http_client.ACCEPTED,
               six.moves.http_client.CREATED
           ])
-
-      print(">>> _patch_chunked_upload resp status %s, content: %s: ", resp.status, unused_content)
+      # Need to use the new location in the response.
+      location = self._get_absolute_url(resp.get('location'))
+      print(">>> _patch_chunked_upload resp status %s, content: %s: " % (resp.status, unused_content))
 
     logging.error('>>> _patch_chunked_upload 3')
     location = self._add_digest(resp['location'], digest)
