@@ -389,7 +389,7 @@ class Transport(object):
 
       headers.update(additional_headers)
 
-      logging.error(">>> Transport.Request 2")
+      logging.error(">>> Transport.Request 2, url: %s, headers: %s" % (url, headers))
 
       # Should have been 2**31-1, but we need space for other headers.
       # if body and len(body) > 2000000000 and method in ('PUT', 'PATCH', 'POST'):

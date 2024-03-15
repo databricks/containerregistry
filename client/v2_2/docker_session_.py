@@ -165,7 +165,7 @@ class Push(object):
       raise ValueError('Empty image body')
 
     mounted, location = self._start_upload(digest, self._mount)
-    logging.error('>>> _patch_chunked_upload 1, image_body type: %s', type(image_body))
+    logging.error('>>> _patch_chunked_upload 1, image_body type: %s, length: %d', type(image_body), len(image_body))
     mounted, location = self._start_upload(digest, self._mount)
 
     if mounted:
@@ -194,6 +194,8 @@ class Push(object):
               six.moves.http_client.NO_CONTENT, six.moves.http_client.ACCEPTED,
               six.moves.http_client.CREATED
           ])
+
+      print(">>> _patch_chunked_upload resp status %s, content: %s: ", resp.status, unused_content)
 
     logging.error('>>> _patch_chunked_upload 3')
     location = self._add_digest(resp['location'], digest)
