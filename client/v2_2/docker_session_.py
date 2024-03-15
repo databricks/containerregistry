@@ -180,6 +180,7 @@ class Push(object):
     for i in range(0, len(image_body), UPLOAD_CHUNK_MAX_SIZE):
       chunk = image_body[i:i + UPLOAD_CHUNK_MAX_SIZE]
       chunk_start, chunk_end_inclusive = i, i + len(chunk) - 1
+      logging.error('>>> _patch_chunked_upload chunk %d, %d', chunk_start, chunk_end_inclusive)
 
       resp, unused_content = self._transport.Request(
           location,

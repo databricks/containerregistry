@@ -337,7 +337,8 @@ class Transport(object):
               method = None,
               body = None,
               content_type = None,
-              accepted_mimes = None
+              accepted_mimes = None,
+              additional_headers = {}
              ):
     """Wrapper containing much of the boilerplate REST logic for Registry calls.
 
@@ -386,17 +387,19 @@ class Transport(object):
       if method in ('POST', 'PUT') and not body:
         headers['content-length'] = '0'
 
+      headers.update(additional_headers)
+
       logging.error(">>> Transport.Request 2")
 
       # Should have been 2**31-1, but we need space for other headers.
-      if body and len(body) > 2000000000 and method in ('PUT', 'PATCH', 'POST'):
-        logging.error(">>> Transport.Request TRY CHUNKS")
-        resp, content = send_large_body_in_chunks(url, method, body, headers, httplib2_transport=self._transport)
-        logging.error(">>> Transport.Request TRY CHUNKS DONE")
-      else:
-        logging.error(">>> Transport.Request NO CHUNKS. METHOD: %s, Body size: %s" % (method, 0 if not body else len(body)))
-        resp, content = self._transport.request(
-            url, method, body=body, headers=headers)
+      # if body and len(body) > 2000000000 and method in ('PUT', 'PATCH', 'POST'):
+      #   logging.error(">>> Transport.Request TRY CHUNKS")
+      #   resp, content = send_large_body_in_chunks(url, method, body, headers, httplib2_transport=self._transport)
+      #   logging.error(">>> Transport.Request TRY CHUNKS DONE")
+      # else:
+      # logging.error(">>> Transport.Request NO CHUNKS. METHOD: %s, Body size: %s" % (method, 0 if not body else len(body)))
+      resp, content = self._transport.request(
+          url, method, body=body, headers=headers)
       
       logging.error(">>> Transport.Request 3")
 
