@@ -187,7 +187,7 @@ class Push(object):
           method='PATCH',
           body=chunk,
           content_type='application/octet-stream',
-          headers={
+          additional_headers={
               'Content-Range': '{start}-{end}'.format(start=chunk_start, end=chunk_end_inclusive)
           },
           accepted_codes=[
