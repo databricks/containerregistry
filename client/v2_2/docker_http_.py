@@ -498,27 +498,26 @@ def send_large_body_in_chunks(url, method, body, headers={}, chunk_size=20000000
     for key, value in headers.items():
         conn.putheader(key, value)
 
-    # # Enable chunked transfer encoding
-    # conn.putheader('Transfer-Encoding', 'chunked')
+    # Enable chunked transfer encoding
+    conn.putheader('Transfer-Encoding', 'chunked')
 
     # End the headers
     conn.endheaders()
 
-    # # Send the body in chunks
-    # for i in range(0, len(body), chunk_size):
-    #     chunk = body[i:i+chunk_size]
-    #     logging.error(">>> Check broken pipe 1")
-    #     conn.send(('%X\r\n' % len(chunk)).encode())
-    #     logging.error(">>> Check broken pipe 2")
-    #     conn.send(chunk)
-    #     conn.send('\r\n'.encode())
-    #     logging.error(">>> Check broken pipe 3")
+    # TODO: implement https://github.com/opencontainers/distribution-spec/blob/main/spec.md#pushing-a-blob-in-chunks
 
-    # # Send zero-length chunk to signal end
-    # conn.send('0\r\n\r\n'.encode())
+    # Send the body in chunks
+    for i in range(0, len(body), chunk_size):
+        chunk = body[i:i+chunk_size]
+        logging.error(">>> Check broken pipe 1")
+        conn.send(('%X\r\n' % len(chunk)).encode())
+        logging.error(">>> Check broken pipe 2")
+        conn.send(chunk)
+        conn.send('\r\n'.encode())
+        logging.error(">>> Check broken pipe 3")
 
-    # Send the body
-    conn.send(body)
+    # Send zero-length chunk to signal end
+    conn.send('0\r\n\r\n'.encode())
 
     # Get the response
     response = conn.getresponse()

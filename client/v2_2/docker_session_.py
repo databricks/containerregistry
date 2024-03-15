@@ -32,6 +32,10 @@ import six.moves.http_client
 import six.moves.urllib.parse
 
 
+# Theoretically max is INT_MAX but we need some extra space for headers.
+UPLOAD_CHUNK_MAX_SIZE = 2000000000
+
+
 def _tag_or_digest(name):
   if isinstance(name, docker_name.Tag):
     return name.tag
@@ -154,10 +158,63 @@ class Push(object):
         method='PUT',
         body=self._get_blob(image, digest),
         accepted_codes=[six.moves.http_client.CREATED])
+  
+  # pylint: disable=missing-docstring
+  def _patch_chunked_upload(self, image_body, digest):
+    if len(image_body) == 0:
+      raise ValueError('Empty image body')
+
+    mounted, location = self._start_upload(digest, self._mount)
+    logging.error('>>> _patch_chunked_upload 1, image_body type: %s', type(image_body))
+    mounted, location = self._start_upload(digest, self._mount)
+
+    if mounted:
+      logging.info('Layer %s mounted.', digest)
+      return
+
+    location = self._get_absolute_url(location)
+
+    logging.error('>>> _patch_chunked_upload 2')
+
+    # Upload the content in chunks. Invoked at least once to get the response.
+    for i in range(0, len(image_body), UPLOAD_CHUNK_MAX_SIZE):
+      chunk = image_body[i:i + UPLOAD_CHUNK_MAX_SIZE]
+      chunk_start, chunk_end_inclusive = i, i + len(chunk) - 1
+
+      resp, unused_content = self._transport.Request(
+          location,
+          method='PATCH',
+          body=chunk,
+          content_type='application/octet-stream',
+          headers={
+              'Content-Range': '{start}-{end}'.format(start=chunk_start, end=chunk_end_inclusive)
+          },
+          accepted_codes=[
+              six.moves.http_client.NO_CONTENT, six.moves.http_client.ACCEPTED,
+              six.moves.http_client.CREATED
+          ])
+
+    logging.error('>>> _patch_chunked_upload 3')
+    location = self._add_digest(resp['location'], digest)
+    location = self._get_absolute_url(location)
+    logging.error('>>> _patch_chunked_upload 4')
+    self._transport.Request(
+        location,
+        method='PUT',
+        body=None,
+        accepted_codes=[six.moves.http_client.CREATED])
+
 
   # pylint: disable=missing-docstring
   def _patch_upload(self, image,
                     digest):
+    body = self._get_blob(image, digest)
+    # When the layer is too large (> INT_MAX), we need to do chunk upload.
+    # Theoretically max is INT_MAX but we need some extra space for headers.
+    if len(body) > UPLOAD_CHUNK_MAX_SIZE:
+      self._patch_chunked_upload(body, digest)
+      return
+
     logging.error('>>> _patch_upload 1')
     mounted, location = self._start_upload(digest, self._mount)
 
@@ -171,7 +228,7 @@ class Push(object):
     resp, unused_content = self._transport.Request(
         location,
         method='PATCH',
-        body=self._get_blob(image, digest),
+        body=body,
         content_type='application/octet-stream',
         accepted_codes=[
             six.moves.http_client.NO_CONTENT, six.moves.http_client.ACCEPTED,
@@ -203,10 +260,19 @@ class Push(object):
     #   clients since 1.8, when they switched to the 3-stage
     #   method below.
     # self._put_upload(image, digest)
+    #
     # or:
     #   POST   /v2/<name>/blobs/uploads/        (no body*)
     #   PATCH  /v2/<name>/blobs/uploads/<uuid>  (full body)
     #   PUT    /v2/<name>/blobs/uploads/<uuid>  (no body)
+    # self._patch_upload(image, digest)
+    #
+    # When the layer is too large (> INT_MAX), we need to do chunk upload.
+    #   POST   /v2/<name>/blobs/uploads/        (no body*)
+    #   PATCH  /v2/<name>/blobs/uploads/<uuid>  (body chunk 1)
+    #   PATCH  /v2/<name>/blobs/uploads/<uuid>  (body chunk ...)
+    #   PUT    /v2/<name>/blobs/uploads/<uuid>  (no body)
+    # self._patch_chunked_upload(image, digest)
     #
     # * We attempt to perform a cross-repo mount if any repositories are
     # specified in the "mount" parameter. This does a fast copy from a
