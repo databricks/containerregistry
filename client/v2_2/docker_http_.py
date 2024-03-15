@@ -472,6 +472,8 @@ def send_large_body_in_chunks(url, method, body, headers={}, chunk_size=20000000
     from urllib.parse import urlparse
     import http.client
     import ssl
+
+    logging.error(">>> URL: %s" % url)
     
     # Parse the URL to get the host and path
     parsed_url = urlparse(url)
@@ -505,9 +507,12 @@ def send_large_body_in_chunks(url, method, body, headers={}, chunk_size=20000000
     # Send the body in chunks
     for i in range(0, len(body), chunk_size):
         chunk = body[i:i+chunk_size]
+        logging.error(">>> Check broken pipe 1")
         conn.send(('%X\r\n' % len(chunk)).encode())
+        logging.error(">>> Check broken pipe 2")
         conn.send(chunk)
         conn.send('\r\n'.encode())
+        logging.error(">>> Check broken pipe 3")
 
     # Send zero-length chunk to signal end
     conn.send('0\r\n\r\n'.encode())
