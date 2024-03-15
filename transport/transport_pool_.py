@@ -30,6 +30,8 @@ class Http(httplib2.Http):
   def __init__(self, transport_factory, size=2):
     self._condition = threading.Condition(threading.Lock())
     self._transports = [transport_factory() for _ in range(size)]
+    # Save a copy of adopted certificate just in case.
+    self.stored_certificates = set()
 
   def _get_transport(self):
     with self._condition:
@@ -59,6 +61,7 @@ class Http(httplib2.Http):
     """
     for transport in self._transports:
       transport.add_certificate(key, cert, domain)
+    self.stored_certificates.add((key, cert, domain))
 
   def request(self, *args, **kwargs):
     """This awaits a transport and delegates the request call.

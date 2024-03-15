@@ -481,11 +481,10 @@ def send_large_body_in_chunks(url, method, body, headers={}, chunk_size=20000000
     # Create a connection to the host
     if parsed_url.scheme == 'https':
       ssl_context = ssl.create_default_context()
-      if httplib2_transport:
-        logging.error(">>> WHAT IT HAS: %s", dir(httplib2_transport))
-
-        for (key, cert, _password) in httplib2_transport.certificates.iter(host):
-          ssl_context.load_cert_chain(certfile=cert, keyfile=key)
+      if httplib2_transport and hasattr(httplib2_transport, 'stored_certificates'):
+        for (key, cert, domain) in httplib2_transport.stored_certificates:
+          if domain == host:
+            ssl_context.load_cert_chain(certfile=cert, keyfile=key)
       conn = http.client.HTTPSConnection(host, context=ssl_context)
     else:
       conn = http.client.HTTPConnection(host)
