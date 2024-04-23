@@ -16,3 +16,4 @@ workspace(name = "containerregistry")
 load(":def.bzl", "repositories")
 
 repositories()
+
