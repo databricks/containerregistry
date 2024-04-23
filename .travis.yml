@@ -27,6 +27,7 @@ before_install:
     docker login -u googlecontainerregistrytesting -p "${GCRT_PASSWORD}" \
       registry.gitlab.com
 
+
 addons:
   apt:
     sources:
@@ -39,3 +40,4 @@ script:
   - bazel clean && bazel build //...
   # Run outside of the sandbox to get access to Docker credentials registered above.
   - bazel clean && bazel test --test_output=errors --strategy=TestRunner=standalone //...
+
