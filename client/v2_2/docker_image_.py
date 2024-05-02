@@ -406,6 +406,18 @@ def is_compressed(name):
   return name[0:2] == b'\x1f\x8b'
 
 
+# Python earlier than 3.7 has a gzip.GzipFile bug that does not support writing
+# content longer than 2^31 bytes. To work around this, we write the content in
+# smaller chunks if exceed size limit.
+def _write_large_content_to_zipped_file(zipped, content, chunk_size=2**31-1):
+  if len(content) > chunk_size:
+    # Write the content in chunks
+    for i in range(0, len(content), chunk_size):
+      zipped.write(content[i:i+chunk_size])
+  else:
+    zipped.write(content)
+
+
 class FromTarball(DockerImage):
   """This decodes the image tarball output of docker_build for upload."""
 
@@ -458,7 +470,7 @@ class FromTarball(DockerImage):
         zipped = gzip.GzipFile(
             mode='wb', compresslevel=self._compresslevel, fileobj=buf)
         try:
-          zipped.write(content)
+          _write_large_content_to_zipped_file(zipped, content)
         finally:
           zipped.close()
         content = buf.getvalue()
