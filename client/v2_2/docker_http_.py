@@ -224,6 +224,9 @@ class Transport(object):
         'content-type': 'application/json',
         'user-agent': docker_name.USER_AGENT,
     }
+    url = '{scheme}://{registry}/v2/'.format(
+            scheme=Scheme(self._name.registry), registry=self._name.registry),
+          
     resp, content = self._transport.request(
         '{scheme}://{registry}/v2/'.format(
             scheme=Scheme(self._name.registry), registry=self._name.registry),
