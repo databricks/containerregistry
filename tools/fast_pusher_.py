@@ -24,6 +24,7 @@ from __future__ import print_function
 
 import argparse
 import logging
+logging.getLogger().setLevel(logging.INFO)
 import sys
 import os
 

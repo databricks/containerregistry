@@ -32,8 +32,8 @@ import six.moves.http_client
 import six.moves.urllib.parse
 
 
-# Theoretically max is INT_MAX but we need some extra space for headers.
-UPLOAD_CHUNK_MAX_SIZE = 2000000000
+# 200 MB chunk to balance performance in poor networking conditions
+UPLOAD_CHUNK_MAX_SIZE = int(2e8)
 
 
 def _exceed_max_chunk_size(image_body):
@@ -178,8 +178,6 @@ class Push(object):
     for i in range(0, len(image_body), UPLOAD_CHUNK_MAX_SIZE):
       chunk = image_body[i:i + UPLOAD_CHUNK_MAX_SIZE]
       chunk_start, chunk_end_inclusive = i, i + len(chunk) - 1
-      logging.info('Uploading chunk range %d-%d', chunk_start, chunk_end_inclusive)
-
       resp, unused_content = self._transport.Request(
           location,
           method='PATCH',
