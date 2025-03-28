@@ -33,7 +33,7 @@ import six.moves.urllib.parse
 
 
 # 200 MB chunk to balance performance in poor networking conditions
-UPLOAD_CHUNK_MAX_SIZE = int(2e8)
+UPLOAD_CHUNK_MAX_SIZE = int(2e7)
 
 
 def _exceed_max_chunk_size(image_body):
@@ -179,20 +179,30 @@ class Push(object):
       chunk = image_body[i:i + UPLOAD_CHUNK_MAX_SIZE]
       chunk_start, chunk_end_inclusive = i, i + len(chunk) - 1
       logging.info('Pushing chunk(%d) for layer %s', i, digest)
+      logging.info(location)
+      logging.info("location: " + location[:100])
       resp, unused_content = self._transport.Request(
           location,
           method='PATCH',
           body=chunk,
           content_type='application/octet-stream',
           additional_headers={
+              'Content-Length': str(len(chunk)),
               'Content-Range': '{start}-{end}'.format(start=chunk_start, end=chunk_end_inclusive)
           },
           accepted_codes=[
               six.moves.http_client.NO_CONTENT, six.moves.http_client.ACCEPTED,
               six.moves.http_client.CREATED
-          ])
+          ]
+          )
+      logging.info(resp)
+      if 'headers' in resp:
+        logging.info('Response headers for chunk(%d): %s', i, resp['headers'])
+      else:
+        logging.info('No headers')
       # Need to use the new location in the response.
       location = self._get_absolute_url(resp.get('location'))
+
 
     location = self._add_digest(resp['location'], digest)
     location = self._get_absolute_url(location)
