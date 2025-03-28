@@ -32,8 +32,10 @@ import six.moves.http_client
 import six.moves.urllib.parse
 
 
-# 200 MB chunk to balance performance in poor networking conditions
-UPLOAD_CHUNK_MAX_SIZE = int(2e8)
+# 200 MB chunk balances performance in poor networking conditions
+# However we need to use 2GB for now for CMv2 to avoid hitting the partial upload api
+# GCR registry unexpectedly drops partial upload connections (us-central1-docker.pkg.dev)
+UPLOAD_CHUNK_MAX_SIZE = int(2e9)
 
 
 def _exceed_max_chunk_size(image_body):
