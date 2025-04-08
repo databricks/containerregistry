@@ -95,6 +95,13 @@ parser.add_argument('--certificates', nargs='*', help='A comma separated ' +
                     'certfile is a PEM formatted certificate chain file. ' +
                     'If the key/cert does not exist it will be ignored.')
 
+parser.add_argument(
+    '--chunk-size',
+    type=int,
+    default=docker_session.UPLOAD_CHUNK_SIZE_MAX,
+    required=False,
+    help='The size of the upload chunk in bytes. Defaults to 2e9 (2 GB).')
+
 _THREADS = 8
 
 
@@ -193,6 +200,9 @@ def main():
       logging.fatal("Local kube cert expired/is not present. Please run './eng-tools/bin/get-kube-access dev'")
       sys.exit(1)
 
+  if args.chunk_size < docker_session.UPLOAD_CHUNK_SIZE_MIN or args.chunk_size > docker_session.UPLOAD_CHUNK_SIZE_MAX:
+    logging.warning('The upload chunk size ' + str(args.chunk_size) + ' is not within [20MB, 2GB] range. This may cause performance issues.')
+
   logging.info('Loading v2.2 image from disk ...')
   with v2_2_image.FromDisk(
       config,
@@ -210,7 +220,7 @@ def main():
 
     try:
       with docker_session.Push(
-          name, creds, transport, threads=_THREADS) as session:
+          name, creds, transport, threads=_THREADS, max_chunk_size=args.chunk_size) as session:
         logging.info('Starting upload ...')
         if args.oci:
           with oci_compat.OCIFromV22(v2_2_img) as oci_img:

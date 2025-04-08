@@ -32,14 +32,11 @@ import six.moves.http_client
 import six.moves.urllib.parse
 
 
-# 200 MB chunk balances performance in poor networking conditions
-# However we need to use 2GB for now for CMv2 to avoid hitting the partial upload api
+# 200 MB chunk balances performance in poor networking conditions. Should only be used for slower registries.
+# We need to use 2GB for now for CMv2 to avoid hitting the partial upload api
 # GCR registry unexpectedly drops partial upload connections (us-central1-docker.pkg.dev)
-UPLOAD_CHUNK_MAX_SIZE = int(2e9)
-
-
-def _exceed_max_chunk_size(image_body):
-  return len(image_body) > UPLOAD_CHUNK_MAX_SIZE
+UPLOAD_CHUNK_SIZE_MAX = int(2e9)
+UPLOAD_CHUNK_SIZE_MIN = int(2e7)
 
 
 def _tag_or_digest(name):
@@ -58,7 +55,8 @@ class Push(object):
                creds,
                transport,
                mount = None,
-               threads = 1):
+               threads = 1,
+               chunk_size = UPLOAD_CHUNK_SIZE_MAX):
     """Constructor.
 
     If multiple threads are used, the caller *must* ensure that the provided
@@ -80,6 +78,7 @@ class Push(object):
                                             docker_http.PUSH)
     self._mount = mount
     self._threads = threads
+    self._chunk_size = chunk_size
 
   def _scheme_and_host(self):
     return '{scheme}://{registry}'.format(
@@ -177,8 +176,8 @@ class Push(object):
     location = self._get_absolute_url(location)
 
     # Upload the content in chunks. Invoked at least once to get the response.
-    for i in range(0, len(image_body), UPLOAD_CHUNK_MAX_SIZE):
-      chunk = image_body[i:i + UPLOAD_CHUNK_MAX_SIZE]
+    for i in range(0, len(image_body), self._chunk_size):
+      chunk = image_body[i:i + self._chunk_size]
       chunk_start, chunk_end_inclusive = i, i + len(chunk) - 1
       logging.info('Pushing chunk(%d) for layer %s', i, digest)
       resp, unused_content = self._transport.Request(
@@ -210,7 +209,7 @@ class Push(object):
     image_body = self._get_blob(image, digest)
     # When the layer is too large, registry might reject.
     # In this case, we need to do chunk upload.
-    if _exceed_max_chunk_size(image_body):
+    if len(image_body) > self._chunk_size:
       logging.info('Uploading layer %s in chunks.', digest)
       self._patch_chunked_upload_image_body(image_body, digest)
       return
