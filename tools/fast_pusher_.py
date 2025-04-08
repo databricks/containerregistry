@@ -98,9 +98,9 @@ parser.add_argument('--certificates', nargs='*', help='A comma separated ' +
 parser.add_argument(
     '--chunk-size',
     type=int,
-    default=docker_session.UPLOAD_CHUNK_SIZE_DEFAULT,
+    default=docker_session.UPLOAD_CHUNK_SIZE_MAX,
     required=False,
-    help='The size of the upload chunk in bytes. Defaults to 1e9 (1 GB).')
+    help='The size of the upload chunk in bytes. Defaults to 2e9 (2 GB).')
 
 _THREADS = 8
 
