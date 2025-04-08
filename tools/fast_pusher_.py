@@ -220,7 +220,7 @@ def main():
 
     try:
       with docker_session.Push(
-          name, creds, transport, threads=_THREADS, max_chunk_size=args.chunk_size) as session:
+          name, creds, transport, threads=_THREADS, chunk_size=args.chunk_size) as session:
         logging.info('Starting upload ...')
         if args.oci:
           with oci_compat.OCIFromV22(v2_2_img) as oci_img:
