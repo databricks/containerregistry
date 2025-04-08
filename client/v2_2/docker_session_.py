@@ -36,6 +36,7 @@ import six.moves.urllib.parse
 # We need to use 2GB for now for CMv2 to avoid hitting the partial upload api
 # GCR registry unexpectedly drops partial upload connections (us-central1-docker.pkg.dev)
 UPLOAD_CHUNK_SIZE_MAX = int(2e9)
+UPLOAD_CHUNK_SIZE_DEFAULT = int(1e9)
 UPLOAD_CHUNK_SIZE_MIN = int(2e7)
 
 
