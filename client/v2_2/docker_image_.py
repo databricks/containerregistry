@@ -406,6 +406,18 @@ def is_compressed(name):
   return name[0:2] == b'\x1f\x8b'
 
 
+# Python earlier than 3.7 has a gzip.GzipFile bug that does not support writing
+# content longer than 2^31 bytes. To work around this, we write the content in
+# smaller chunks if exceed size limit.
+def _write_large_content_to_zipped_file(zipped, content, chunk_size=2**31-1):
+  if len(content) > chunk_size:
+    # Write the content in chunks
+    for i in range(0, len(content), chunk_size):
+      zipped.write(content[i:i+chunk_size])
+  else:
+    zipped.write(content)
+
+
 class FromTarball(DockerImage):
   """This decodes the image tarball output of docker_build for upload."""
 
@@ -458,7 +470,7 @@ class FromTarball(DockerImage):
         zipped = gzip.GzipFile(
             mode='wb', compresslevel=self._compresslevel, fileobj=buf)
         try:
-          zipped.write(content)
+          _write_large_content_to_zipped_file(zipped, content)
         finally:
           zipped.close()
         content = buf.getvalue()
@@ -799,18 +811,18 @@ class FromDisk(DockerImage):
     pass
 
 
-def _in_whiteout_dir(fs, name):
+def _in_whiteout_dir(fs, opaque_whiteouts, name):
   while name:
     dirname = os.path.dirname(name)
     if name == dirname:
       break
-    if fs.get(dirname):
+    if fs.get(dirname) or dirname in opaque_whiteouts:
       return True
     name = dirname
   return False
 
-
 _WHITEOUT_PREFIX = '.wh.'
+_OPAQUE_WHITEOUT_FILENAME = '.wh..wh..opq'
 
 
 def extract(image, tar):
@@ -824,17 +836,27 @@ def extract(image, tar):
   # to whether they are a tombstone or not.
   fs = {}
 
+  opaque_whiteouts_in_higher_layers = set()
+
   # Walk the layers, topmost first and add files.  If we've seen them in a
   # higher layer then we skip them
   for layer in image.diff_ids():
     buf = io.BytesIO(image.uncompressed_layer(layer))
     with tarfile.open(mode='r:', fileobj=buf) as layer_tar:
+      opaque_whiteouts_in_this_layer = []
       for tarinfo in layer_tar:
         # If we see a whiteout file, then don't add anything to the tarball
         # but ensure that any lower layers don't add a file with the whited
         # out name.
         basename = os.path.basename(tarinfo.name)
         dirname = os.path.dirname(tarinfo.name)
+
+        # If we see an opaque whiteout file, then don't add anything to the
+        # tarball but ensure that any lower layers don't add files or
+        # directories which are siblings of the whiteout file.
+        if basename == _OPAQUE_WHITEOUT_FILENAME:
+          opaque_whiteouts_in_this_layer.append(dirname)
+
         tombstone = basename.startswith(_WHITEOUT_PREFIX)
         if tombstone:
           basename = basename[len(_WHITEOUT_PREFIX):]
@@ -846,7 +868,7 @@ def extract(image, tar):
           continue
 
         # Check for a whited out parent directory
-        if _in_whiteout_dir(fs, name):
+        if _in_whiteout_dir(fs, opaque_whiteouts_in_higher_layers, name):
           continue
 
         # Mark this file as handled by adding its name.
@@ -858,3 +880,4 @@ def extract(image, tar):
             tar.addfile(tarinfo, fileobj=layer_tar.extractfile(tarinfo))
           else:
             tar.addfile(tarinfo, fileobj=None)
+      opaque_whiteouts_in_higher_layers.update(opaque_whiteouts_in_this_layer)

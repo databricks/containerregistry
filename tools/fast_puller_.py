@@ -63,6 +63,19 @@ parser.add_argument(
 parser.add_argument(
     '--cache', action='store', help='Image\'s files cache directory.')
 
+parser.add_argument('--allow-v2', action='store_true',
+                    help='Allow pulling V2 Images')
+
+parser.add_argument('--first-layer', action='store', type=int,
+                    help=('WIP'))
+
+parser.add_argument('--certificates', nargs='*', help='A comma separated ' +
+                    'tuple of key file, cert, and domain. (From httplib2 ' +
+                    'docs) Add a key and cert that will be used for an SSL ' +
+                    'connection to the specified domain. keyfile is the name ' +
+                    'of a PEM formatted file that contains your private key. ' +
+                    'certfile is a PEM formatted certificate chain file.')
+
 _THREADS = 8
 
 
@@ -74,6 +87,12 @@ def main():
   retry_factory = retry.Factory()
   retry_factory = retry_factory.WithSourceTransportCallable(httplib2.Http)
   transport = transport_pool.Http(retry_factory.Build, size=_THREADS)
+
+  if args.certificates:
+    for item in args.certificates:
+      logging.info('Adding certificate %s', item)
+      key, cert, domain = item.split(',')
+      transport.add_certificate(key, cert, domain)
 
   if '@' in args.name:
     name = docker_name.Digest(args.name)
@@ -125,8 +144,13 @@ def main():
             v2_2_img,
             args.directory,
             threads=_THREADS,
-            cache_directory=args.cache)
+            cache_directory=args.cache,
+            first_layer=args.first_layer)
         return
+
+    if not args.allow_v2:
+      logging.fatal('v2.2 image not found: %r', name)
+      sys.exit(1)
 
     logging.info('Pulling v2 image from %r ...', name)
     with v2_image.FromRegistry(name, creds, transport) as v2_img:

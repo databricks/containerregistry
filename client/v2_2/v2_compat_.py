@@ -20,6 +20,7 @@ from __future__ import print_function
 
 import json
 
+import concurrent.futures
 from containerregistry.client.v2 import docker_image as v2_image
 from containerregistry.client.v2 import util as v2_util
 from containerregistry.client.v2_2 import docker_digest
@@ -108,13 +109,18 @@ class V22FromV2(v2_2_image.DockerImage):
     raw_manifest_schema1 = self._v2_image.manifest()
     manifest_schema1 = json.loads(raw_manifest_schema1)
 
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+      diff_id_futures = [
+          executor.submit(self._GetDiffId, digest)
+          for digest in reversed(self._v2_image.fs_layers())
+      ]
+
+      diff_ids = [f.result() for f in diff_id_futures]
+
     self._config_file = config_file([
         json.loads(history.get('v1Compatibility', '{}'))
         for history in reversed(manifest_schema1.get('history', []))
-    ], [
-        self._GetDiffId(digest)
-        for digest in reversed(self._v2_image.fs_layers())
-    ])
+    ], diff_ids)
 
     config_bytes = self._config_file.encode('utf8')
     config_descriptor = {

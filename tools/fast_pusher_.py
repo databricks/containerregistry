@@ -24,7 +24,9 @@ from __future__ import print_function
 
 import argparse
 import logging
+logging.getLogger().setLevel(logging.INFO)
 import sys
+import os
 
 from containerregistry.client import docker_creds
 from containerregistry.client import docker_name
@@ -38,7 +40,6 @@ from containerregistry.transport import transport_pool
 
 import httplib2
 from six.moves import zip  # pylint: disable=redefined-builtin
-
 
 parser = argparse.ArgumentParser(
     description='Push images to a Docker Registry, faaaaaast.')
@@ -85,6 +86,21 @@ parser.add_argument(
     action='store',
     help='The path to the directory where the client configuration files are '
     'located. Overiddes the value from DOCKER_CONFIG')
+
+parser.add_argument('--certificates', nargs='*', help='A comma separated ' +
+                    'tuple of key file, cert, and domain. (From httplib2 ' +
+                    'docs) Add a key and cert that will be used for an SSL ' +
+                    'connection to the specified domain. keyfile is the name ' +
+                    'of a PEM formatted file that contains your private key. ' +
+                    'certfile is a PEM formatted certificate chain file. ' +
+                    'If the key/cert does not exist it will be ignored.')
+
+parser.add_argument(
+    '--chunk-size',
+    type=int,
+    default=docker_session.UPLOAD_CHUNK_SIZE_MAX,
+    required=False,
+    help='The size of the upload chunk in bytes. Defaults to 2e9 (2 GB).')
 
 _THREADS = 8
 
@@ -160,6 +176,33 @@ def main():
   retry_factory = retry_factory.WithSourceTransportCallable(httplib2.Http)
   transport = transport_pool.Http(retry_factory.Build, size=_THREADS)
 
+  if args.certificates:
+    found_one = False
+
+    for item in args.certificates:
+      logging.info('Adding certificate %s', item)
+      key, cert, domain = item.split(',')
+      # httplib2 does not like taking cert files that do not exist, so check that they exist
+      if os.path.isfile(key) and os.path.isfile(cert):
+        transport.add_certificate(key, cert, domain)
+        test_cert_response = transport.request("https://" + domain + "/certtestignore", "POST", body="test")
+        # If the return value is success, redirect, or page not found we know that we are authorized,
+        # but that the image /certtestignore is not a real image. Which is expected.
+        if test_cert_response[0].status == 200 or \
+                test_cert_response[0].status == 201 or \
+                test_cert_response[0].status == 307 or \
+                test_cert_response[0].status == 404:
+            found_one = True
+            break;
+        transport = transport_pool.Http(retry_factory.Build, size=_THREADS)
+
+    if not found_one:
+      logging.fatal("Local kube cert expired/is not present. Please run './eng-tools/bin/get-kube-access dev'")
+      sys.exit(1)
+
+  if args.chunk_size < docker_session.UPLOAD_CHUNK_SIZE_MIN or args.chunk_size > docker_session.UPLOAD_CHUNK_SIZE_MAX:
+    logging.warning('The upload chunk size ' + str(args.chunk_size) + ' is not within [20MB, 2GB] range. This may cause performance issues.')
+
   logging.info('Loading v2.2 image from disk ...')
   with v2_2_image.FromDisk(
       config,
@@ -177,7 +220,7 @@ def main():
 
     try:
       with docker_session.Push(
-          name, creds, transport, threads=_THREADS) as session:
+          name, creds, transport, threads=_THREADS, chunk_size=args.chunk_size) as session:
         logging.info('Starting upload ...')
         if args.oci:
           with oci_compat.OCIFromV22(v2_2_img) as oci_img:

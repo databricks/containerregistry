@@ -144,7 +144,8 @@ def tarball(name, image,
 def fast(image,
          directory,
          threads = 1,
-         cache_directory = None):
+         cache_directory = None,
+         first_layer = 0):
   """Produce a FromDisk compatible file layout under the provided directory.
 
   After calling this, the following filesystem will exist:
@@ -227,6 +228,10 @@ def fast(image,
     idx = 0
     layers = []
     for blob in reversed(image.fs_layers()):
+      if idx < first_layer:
+        idx += 1
+        continue
+
       # Create a local copy
       layer_name = os.path.join(directory, '%03d.tar.gz' % idx)
       digest_name = os.path.join(directory, '%03d.sha256' % idx)

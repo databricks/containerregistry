@@ -17,6 +17,8 @@
 
 import logging
 import time
+import socket
+import errno
 
 from containerregistry.transport import nested
 
@@ -28,11 +30,14 @@ DEFAULT_MAX_RETRIES = 2
 DEFAULT_BACKOFF_FACTOR = 0.5
 RETRYABLE_EXCEPTION_TYPES = [
     six.moves.http_client.IncompleteRead,
-    six.moves.http_client.ResponseNotReady
+    six.moves.http_client.ResponseNotReady,
+    socket.timeout,
 ]
 
 
 def ShouldRetry(err):
+  if isinstance(err, OSError) and err.errno == errno.ETIMEDOUT:
+      return True
   for exception_type in RETRYABLE_EXCEPTION_TYPES:
     if isinstance(err, exception_type):
       return True

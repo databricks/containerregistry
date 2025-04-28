@@ -92,6 +92,29 @@ class Basic(SchemeProvider):
     p = self.password.encode('utf8')
     return base64.b64encode(u + b':' + p).decode('utf8')
 
+class IdentityToken(SchemeProvider):
+  """Implementation for providing ID token credentials."""
+
+  def __init__(self, token):
+    super(IdentityToken, self).__init__('Basic')
+    self._password = token 
+
+  @property
+  def username(self):
+    # MSFT for some reason requires the user name to be set to this value when using an identity token
+    # https://learn.microsoft.com/en-us/azure/container-registry/container-registry-authentication?tabs=azure-cli
+    return '00000000-0000-0000-0000-000000000000' 
+
+  @property
+  def password(self):
+    return self._password
+
+  @property
+  def suffix(self):
+    u = self.username.encode('utf8')
+    p = self.password.encode('utf8')
+    return base64.b64encode(u + b':' + p).decode('utf8')
+
 
 _USERNAME = '_token'
 
@@ -278,14 +301,16 @@ class _DefaultKeychain(Keychain):
     for form in _FORMATS:
       if form % name.registry in auths:
         entry = auths[form % name.registry]
-        if 'auth' in entry:
+        if 'identitytoken' in entry:
+          token = entry['identitytoken']
+          return IdentityToken(token)
+        elif 'auth' in entry:
           decoded = base64.b64decode(entry['auth']).decode('utf8')
           username, password = decoded.split(':', 1)
           return Basic(username, password)
         elif 'username' in entry and 'password' in entry:
           return Basic(entry['username'], entry['password'])
         else:
-          # TODO(user): Support identitytoken
           # TODO(user): Support registrytoken
           raise Exception(
               'Unsupported entry in "auth" section of Docker config: ' +
