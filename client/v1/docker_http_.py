@@ -52,7 +52,8 @@ def Request(transport,
             credentials,
             accepted_codes = None,
             body = None,
-            content_type = None):
+            content_type = None,
+            extra_headers = None):
   """Wrapper containing much of the boilerplate REST logic for Registry calls.
 
   Args:
@@ -62,6 +63,7 @@ def Request(transport,
     accepted_codes: the list of acceptable http status codes
     body: the body to pass into the PUT request (or None for GET)
     content_type: the mime-type of the request (or None for JSON)
+    extra_headers: optional dictionary of additional headers to include
 
   Raises:
     BadStatusException: the status codes wasn't among the acceptable set.
@@ -75,6 +77,8 @@ def Request(transport,
       'X-Docker-Token': 'true',
       'user-agent': docker_name.USER_AGENT,
   }
+  if extra_headers:
+    headers.update(extra_headers)
   resp, content = transport.request(
       url, 'PUT' if body else 'GET', body=body, headers=headers)
 

@@ -306,7 +306,8 @@ class Transport(object):
       accepted_codes = None,
       method = None,
       body = None,
-      content_type = None):
+      content_type = None,
+      extra_headers = None):
     """Wrapper containing much of the boilerplate REST logic for Registry calls.
 
     Args:
@@ -317,6 +318,7 @@ class Transport(object):
       body: the body to pass into the PUT request (or None for GET)
       content_type: the mime-type of the request (or None for JSON).
               content_type is ignored when body is None.
+      extra_headers: optional dictionary of additional headers to include
 
     Raises:
       BadStateException: an unexpected internal state has been encountered.
@@ -347,6 +349,9 @@ class Transport(object):
       # POST/PUT require a content-length, when no body is supplied.
       if method in ('POST', 'PUT') and not body:
         headers['content-length'] = '0'
+
+      if extra_headers:
+        headers.update(extra_headers)
 
       resp, content = self._transport.request(
           url, method, body=body, headers=headers)

@@ -110,7 +110,8 @@ class Push(object):
         accepted_codes=[
             six.moves.http_client.OK, six.moves.http_client.NOT_FOUND
         ],
-        accepted_mimes=[image.media_type()])
+        accepted_mimes=[image.media_type()],
+        extra_headers={'Databricks-Arf-Bypass-Redirect': 'true'})
 
     return resp.status == six.moves.http_client.OK  # pytype: disable=attribute-error
 

@@ -107,7 +107,8 @@ class Push(object):
         method='GET',
         accepted_codes=[
             six.moves.http_client.OK, six.moves.http_client.NOT_FOUND
-        ])
+        ],
+        extra_headers={'Databricks-Arf-Bypass-Redirect': 'true'})
 
     return resp.status == six.moves.http_client.OK  # pytype: disable=attribute-error
 
